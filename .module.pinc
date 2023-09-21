@@ -1,0 +1,16 @@
+<?php
+// @author: C.A.D. BONDJE DOUE
+// @file: %modules%/igk/io/GraphQl/.module.pinc.php
+// @date: 20221104 19:24:11
+namespace igk\io\GraphQl;
+
+
+// + module definition
+return [
+//------------------------------------------------
+// define entry name space
+//
+"entry_NS"=>\igk\io\GraphQl::class,
+"version"=>1.0,
+"author"=>"C.A.D. BONDJE DOUE"
+];
