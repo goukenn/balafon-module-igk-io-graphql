@@ -1,8 +1,10 @@
 # igk/io/GraphQl
  
+# igk\io\GraphQL module 
 
+version : 1.0
 
-### The simple graphQL base QL implementation to get and retrieve data. 
+### The simple graphQL base implementation to get or mutate data from balafon 
 
 
 ```graphql
