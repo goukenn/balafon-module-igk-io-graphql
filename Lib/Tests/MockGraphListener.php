@@ -17,7 +17,9 @@ class MockGraphListener implements IGraphQlMapDataResolver{
     public function user($id=null){ 
         return [
             "name"=>"user1",
-            "email"=>"cbondje@igkdev.com"
+            "email"=>"cbondje@igkdev.com",
+            "lang"=>"en",
+            "press"=>"pressing"
         ];
     }
     public function users($id=null){ 
@@ -34,8 +36,8 @@ class MockGraphListener implements IGraphQlMapDataResolver{
             "url"=>"https://com.test.balafon.get-picure/",
         ];
     }
-    public function usersInject(Users $user){
-        // return [$user->map(['clLogin'=>'email'])];
+    public function usersInject(?Users $user){
+        if ($user) 
         return [$user];//->map(['clLogin'=>'email'])];
     }
     public function usersInjectArray($uid){
@@ -73,7 +75,16 @@ class MockGraphListener implements IGraphQlMapDataResolver{
             ["name"=>$name."_2update"],
         ];
     }
-    public function changeLang(Users $user, $lang='fr'){
+    /**
+     * check with use injection
+     * @param Users $user 
+     * @param string $lang 
+     * @return false|Users 
+     */
+    public function changeLang(?Users $user, $lang='fr'){
+        if (!$user){
+            return false;
+        }
   
         $user->clLocale = $lang;
         $user->fb_user_id=null;
@@ -85,7 +96,9 @@ class MockGraphListener implements IGraphQlMapDataResolver{
     public function query(){
         return[             
             'locale'=>"en" ,
-            'email'=>"t4@local.test" ,            
+            'email'=>"t4@local.test" , 
+            'lang'=>'en',
+            'press'=>'pressing'           
         ];
     }
 }

@@ -37,4 +37,17 @@ class GraphQLFieldInfo
      * @var null|string|int 
      */
     var $default;
+
+    /**
+     * argument for method type
+     * @var ?object
+     */
+    var $args;
+
+
+    /**
+     * field description
+     * @var ?string
+     */
+    var $description;
 }

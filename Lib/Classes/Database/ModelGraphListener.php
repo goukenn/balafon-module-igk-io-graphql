@@ -11,10 +11,14 @@ use IGK\Controllers\BaseController;
 * reprenset system model graph listener 
 * @package igk\io\GraphQl\Database
 */
-class ModelGraphListener{
+abstract class ModelGraphListener{
     private $m_controller;
     public function __function (BaseController $controller){
         $this->m_controller = $controller;
     }
+    public function getController(){
+        return $this->m_controller;
+    }
     // define method that will hangle graph query or mutation 
+    public abstract function query();
 }

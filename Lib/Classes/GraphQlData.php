@@ -21,21 +21,36 @@ class GraphQlData{
      */
     var $entry;
     /**
-     * is indexed 
-     * @var bool
-     */
-    var $m_is_index = false;
-    /**
      * the name of the graph ql string data 
      * @var mixed
      */
     var $name;
-
+    
+    /**
+     * is indexed 
+     * @var bool
+     */
+    private $m_is_index = false;
     /**
      * data store 
      * @var array
      */
     private $m_info = [];
+
+    /**
+     * is provided
+     * @var false
+     */
+    private $m_isProvided = false;
+
+
+    /**
+     * this store graph data
+     * @return mixed 
+     */
+    public function isProvided():bool{
+        return $this->m_isProvided;
+    }
     public function first(){
         return $this->m_is_index ? array_values($this->entry)[0] : $this->entry;
     }
@@ -44,9 +59,15 @@ class GraphQlData{
         $v_d->storeEntry($data);
         return $v_d;
     }
+    /**
+     * store entry
+     * @param mixed $data 
+     * @return void 
+     */
     public function storeEntry($data){
         $this->entry = $data;
         $this->m_is_index = ($data && is_array($data) && !igk_array_is_assoc($data));
+        $this->m_isProvided = true;
     }
     public function isIndex(){
         return $this->m_is_index;
@@ -59,11 +80,15 @@ class GraphQlData{
      * @return mixed 
      * @throws IGKException 
      */
-    public function getValue($key, $data, callable $mapping){        
-        $f_info = $this->m_info[$key];
+    public function getValue($key, $data, callable $mapping){      
+        if (!$this->m_isProvided){
+            igk_die("no data provided");
+        }  
+        $f_info = igk_getv($this->m_info, $key);
+        $v_def = $f_info ? $f_info->default: null;
 
         if ($data instanceof IGraphQlMappingData){
-            $v = $data->getMappingValue($key, $f_info->default);
+            $v = $data->getMappingValue($key, $v_def);
         }
         else if ($data instanceof ModelBase){
             $info = $data->getTableInfo();
@@ -71,15 +96,20 @@ class GraphQlData{
             $map_data = $mapping($tn); // $this->getMapData($tn);
             if ($map_data){
                 $b = $data->map($map_data);
-                $v = igk_getv($b, $key,  $f_info->default);
+                $v = igk_getv($b, $key,  $v_def);
             }
         }
         else{
-            $v = igk_getv($data, $key, $f_info->default);
-        }
-
-        return $v;// igk_getv($data, $key, $f_info->default);
+            $v = igk_getv($data, $key, $v_def);
+        } 
+        return $v; 
     }
+    /**
+     * store data info 
+     * @param mixed $key 
+     * @param mixed $info 
+     * @return void 
+     */
     public function storeInfo($key, $info){
         $this->m_info[$key] = $info;
     }

@@ -65,6 +65,7 @@ $parse = GraphQlParser::Parse(@"query Book{
 ```graphql
 mutation{
     changeLang(id: 4, locale: 'en'){
+        # response 
         locale
     }
 }
@@ -72,5 +73,15 @@ mutation{
 
 
 ### support array['query'=>'...','variables'=>'...'] 
+
+speading on fragment - always in the current context - 
+
+
+by default reseverd fields arguments
+- limit : to limit export result
+- orderBy : to orderBy a spécific column list
+- 
+
+
 
 2023 @ C.A.D. BONDJE DOUE

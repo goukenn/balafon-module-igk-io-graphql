@@ -42,4 +42,8 @@ class GraphQlDeclaredInput{
 
     protected function __construct(){        
     }
+
+    public function readDefinition($reader): bool{
+        return false;
+    }
 }

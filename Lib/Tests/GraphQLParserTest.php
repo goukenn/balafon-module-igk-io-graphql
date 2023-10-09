@@ -5,10 +5,12 @@
 // @cmd: phpunit -c phpunit.xml.dist src/application/Packages/Modules/igk/io/GraphQl/Lib/Tests/GraphQLParserTest.php
 namespace igk\io\GraphQl\Tests;
 
+use IGK\Controllers\SysDbController;
 use IGK\Helper\Activator;
 use IGK\Helper\JSon;
 use IGK\Helper\JSonEncodeOption;
 use igk\io\GraphQl\GraphQlParser;
+use igk\io\GraphQl\GraphQlQueryOptions;
 use IGK\System\Exceptions\EnvironmentArrayException;
 use IGK\Tests\Controllers\ModuleBaseTestCase;
 use IGKException;
@@ -250,7 +252,7 @@ GQL
             $obj
         ); 
         $def = $parser->getDeclaredInputs()['query'];
-        $this->assertEquals('{"type":"query","definition":{"n":{"name":"n"},"m":{"name":"m"}},"description":"this is a description"}', 
+        $this->assertEquals('[{"type":"query","definition":{"n":{"name":"n"},"m":{"name":"m"}},"description":"this is a description"}]', 
             JSon::Encode($def, Activator::CreateNewInstance(JSonEncodeOption::class,['ignore_empty'=>true]))
         );
     }
@@ -275,7 +277,7 @@ GQL
        
         $def = $parser->getDeclaredInputs()['enum'];
         $this->assertEquals('{"type":"enum","name":"CAR","definition":{"MERCEDES":{"name":"MERCEDES"},"TOYOTA":{"name":"TOYOTA"}}}', 
-            JSon::Encode($def, Activator::CreateNewInstance(JSonEncodeOption::class,['ignore_empty'=>true]))
+            JSon::Encode($def[0], Activator::CreateNewInstance(JSonEncodeOption::class,['ignore_empty'=>true]))
         );
     }
     public function test_parsing_enum_with_description(){
@@ -283,7 +285,7 @@ GQL
         $obj = GraphQlParser::Parse('enum Lang{"Francais" FR, "English" EN}',[], null, $parser);        
        
         $def = $parser->getDeclaredInputs()['enum'];
-        $this->assertEquals('{"type":"enum","name":"Lang","definition":{"FR":{"name":"FR","description":"Francais"},"EN":{"name":"EN","description":"English"}}}', 
+        $this->assertEquals('[{"type":"enum","name":"Lang","definition":{"FR":{"name":"FR","description":"Francais"},"EN":{"name":"EN","description":"English"}}}]', 
             JSon::Encode($def, Activator::CreateNewInstance(JSonEncodeOption::class,['ignore_empty'=>true]))
         );
     }
@@ -326,6 +328,12 @@ GQL
         );
     }
     public function test_parsing_variables_with_inject(){
+        $ad = SysDbController::ctrl()->getDataAdapter();
+        if (!$ad->connect()){
+            $this->markTestSkipped('no dataapteer');
+            return;
+        }
+        $ad->close();
         // query with name 
         $obj = GraphQlParser::Parse([
             'query'=>"{userList: usersInject(\$uid:Int=1){ email }}",
@@ -345,6 +353,12 @@ GQL
     }
 
     public function test_parsing_variables_with_inject_array(){
+        $ad = SysDbController::ctrl()->getDataAdapter();
+        if (!$ad->connect()){
+            $this->markTestSkipped('no dataapteer');
+            return;
+        }
+        $ad->close();
         // query with name 
         $obj = GraphQlParser::Parse([
             'query'=>"{userList: usersInjectArray(\$uid:Int=1){ email }}",
@@ -426,6 +440,13 @@ GQL
     }
     public function test_mutation_change_lang(){
         // query with name 
+        $ad = SysDbController::ctrl()->getDataAdapter();
+
+        if (!$ad->connect()){
+            $this->markTestSkipped('data adapter can not connect');
+            return;
+        }
+        $ad->close();
         $obj = GraphQlParser::Parse([
             'query'=>"mutation{changeLang(id: \$uid, locale: 'en'){ locale, id } }",
             'variables'=>[
@@ -461,5 +482,136 @@ GQL
         ],
             $obj
         );
+    }
+
+    public function test_spread_read(){ 
+            // query with name 
+            $obj = GraphQlParser::Parse([
+                'query'=>"{ email, ...locale } fragment locale on User { lang, press }",
+                'variables'=>[
+                    'uid'=>4
+                ]
+            ],null, new MockGraphListener, $parser);        
+           
+            
+            $this->assertEquals((object)[                 
+                'email'=>"t4@local.test" ,            
+                'lang'=>"en" ,
+                'press'=>"pressing" ,
+            ],
+                $obj
+            );
+    }
+
+    /**
+     * test read fragment
+     * @return void 
+     */
+    public function test_read_fragment(){
+        $obj = GraphQlParser::Parse([
+            'query'=>"fragment localFragment on User{name { firstname} } fragment xd on User{firstname} type User{ name, firstname, lastname}",
+            'variables'=>[
+                'uid'=>4
+            ]
+        ],[], new MockGraphListener, $parser);
+
+        $v_fragments = $parser->getFragments();
+
+
+        $this->assertEquals('localFragment', $v_fragments[0]->name);
+        $this->assertEquals('User', $v_fragments[0]->on);       
+    }
+
+    public function test_mocking_inline_no_name(){
+        // | check that chain arg ignore function list and return only access fields
+        $query1 = <<<EOF
+        {
+            products(i: 45) {
+                id
+                name
+            }
+        }
+EOF;
+        $d1 = GraphQlParser::Parse($query1, [], new MockingInlineListener());
+        $r = $this->getMockingresult();
+        $this->assertEquals( json_encode($r), json_encode($d1));
+    }
+
+    public function test_mocking_withToQueryTypeName(){
+        $query1 = <<<EOF
+query toQuery{
+            products(i: 45) {
+                id
+                name
+            }
+}
+EOF;
+        $d1 = GraphQlParser::Parse($query1, [], new MockingInlineListener());
+        $r = $this->getMockingresult();
+        $this->assertEquals( json_encode($r), json_encode($d1));
+    }
+    public function test_mocking_withToQueryTypeName2(){
+        $query1 = <<<EOF
+toQuery{
+            products(i: 45) {
+                id
+                name
+            }
+}
+EOF;
+        $d1 = GraphQlParser::Parse($query1, [], new MockingInlineListener());
+        $r = $this->getMockingresult();
+        $this->assertEquals( json_encode($r), json_encode($d1));
+    }
+    protected function getMockingresult(){
+        return json_decode(<<<EOF
+        {
+            "products": [
+                {
+                    "id": 1,
+                    "name": "cocacola"
+                },
+                {
+                    "id": 2,
+                    "name": "fanta"
+                }
+            ]
+        }
+EOF);
+
+    }
+
+    public function test_mocking_read_function_array(){
+        $query1 = <<<EOF
+{
+            products(id: 3, limit: [2,45], orderBy:["name","id"]) {
+                id
+                name
+            }
+}
+EOF;
+        $d1 = GraphQlParser::Parse($query1, [], new MockingInlineListener());
+        $r = $this->getMockingresult();
+        $this->assertEquals( json_encode($r), json_encode($d1));
+    }
+}
+
+
+
+class MockingInlineListener{
+    /**
+     * query base listener 
+     * @return null 
+     */
+    public function query(){
+        return null;
+    }
+    public function products(GraphQlQueryOptions $options, $product = null){ 
+        // igk_wln_e($options->limit, json_encode($options));
+
+        return [
+            (object)['id'=>1, 'name'=>'cocacola'] ,
+            (object)['id'=>2, 'name'=>'fanta'] ,
+        ];
     }
 }

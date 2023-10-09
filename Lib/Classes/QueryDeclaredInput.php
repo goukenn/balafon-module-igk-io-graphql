@@ -17,6 +17,12 @@ class QueryDeclaredInput extends GraphQlDeclaredInput{
      */
     var $parameters;
 
+    /**
+     * set top query parameter list 
+     * @param mixed $paralist 
+     * @param mixed $params 
+     * @return void 
+     */
     public function setParameter($paralist, $params=null){
         $d = [];
         foreach($paralist as $k=>$v){
