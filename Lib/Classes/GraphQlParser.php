@@ -143,34 +143,9 @@ class GraphQlParser
             return $this->getMapData($tn);
         };
     }
-    protected function _update_chain_args(& $chain_args, $id, $v, & $chain_start){
+    protected function _update_chain_args(GraphQlChainGraph $chain_args, $id, $v, & $chain_start){
         // igk_wln("id: ".$id." : ".$v);
-        switch($id){
-            case self::T_GRAPH_START:
-                if ($chain_start){
-                    // + | append entry fields
-                    $chain_args[] = null;
-                }
-                $chain_start = 1;
-                break;
-            case self::T_GRAPH_END: 
-                // + || prop arg entry
-                array_pop($chain_args);
-                break;
-            case self::T_GRAPH_NAME: 
-                if ($chain_start){
-                    // + | replace last argument 
-                    array_pop($chain_args);
-                    $chain_args[] = $v;
-                }
-                break;
-            case self::T_GRAPH_ARGUMENT:
-                // + | remove last argument from chain list 
-                array_pop($chain_args);
-                $chain_args = [];
-                break;
-
-        }
+        $chain_args->update($id, $v, $chain_start);     
     }
     /**
      * load data 
@@ -202,10 +177,10 @@ class GraphQlParser
         $v_outlist = null;
         $v_injector = Dispatcher::GetInjectTypeInstance(GraphQlQueryOptions::class,null);
         // + | to store property in chain list 
-        $v_chain_args = [];
+        $v_chain_args = new GraphQlChainGraph;
         $v_chainstart = false;
 
-
+        $v_model_callback = $this->_get_model_callback();
         while ($parser->read()) {
             $v = $e = $parser->token();
             $id = null;
@@ -261,7 +236,9 @@ class GraphQlParser
                     break;
                 case self::T_GRAPH_END:
                     // + | for every } command check that the data is already provided - 
-                    $this->_end_graph_end($o, $data);
+                    if ($this->_end_graph_end($data)){
+                        $v_init_graph_obj = true;
+                    }
 
                     if ($v_init_graph_obj){
                         $this->_update_value($o, $data);
@@ -269,7 +246,7 @@ class GraphQlParser
                     }
 
                     if (!empty($n = $f_info->name)) {
-                        $this->_update_mark($o, $f_info, $data, $v_description, $v_chain_args);
+                        $this->_update_mark($o, $f_info, $data, $v_chain_args->path());
                     }
                     
                     if (($data instanceof GraphQlData) && $this->m_listener && !$v_ldinput && !$v_init_data) {
@@ -295,7 +272,7 @@ class GraphQlParser
                                 foreach (array_keys($o) as $k) {
                                     if (is_numeric($k)){
                                         $v_tobj = $o[$k]; 
-                                        $v_tobj->updateFields($this, $k, $o, $data, $t_entry, $this->_get_model_callback());
+                                        $v_tobj->updateFields($this, $k, $o, $data, $v_data, $this->_get_model_callback());
                                     } else {
                                         $o[$k] = $data->getValue($k,
                                         $v_data,
@@ -306,27 +283,7 @@ class GraphQlParser
                             }
                         }
                     }
-
-                    if ($data->isIndex()) {
-                        // o is the modele
-                        $other = array_slice($data->entry, 1);
-                        // copy data
-                        $tab = [$o];
-                        $model = array_keys($o);
-
-                        while (count($other) > 0) {
-                            $rp = array_shift($other);
-                            $i = [];
-                            foreach ($model as $k) {
-                                $i[$k] = $data->getValue($k, $rp, $this->_get_model_callback());
-                            }
-                            $tab[] = $i;
-                        }
-                        // + | change the reference of  
-                        $o = $tab;
-                        $data->storeEntry(-1);
-                    }
-
+                    $data->updateObjectField($o, $v_chain_args->path(), $v_model_callback); 
 
                     if (($c = count($q)) > 0) {
                         $o = &$q[$c - 1];
@@ -370,11 +327,11 @@ class GraphQlParser
                                 $v_alias = false;
                                 break;
                             }
-                            $this->_update_mark($o, $f_info, $data, $v_description, $v_chain_args);
-                        } else {
-                            $f_info->description = $v_description;
-                        }
+                            $this->_update_mark($o, $f_info, $data, $v_chain_args->basePath());
+                            $v_init_graph_obj = false;
+                        }                       
                         $f_info->name = $v;
+                        $f_info->description = $v_description;
                         $v_description = null;
                     } else {
                         if ($v_ldinput && $v_def_name) {
@@ -430,7 +387,8 @@ class GraphQlParser
                 case self::T_GRAPH_TYPE_DEFINITION:
                     $f_info->type = $v["type"];
                     $f_info->default = $v["default"];
-                    $this->_update_mark($o, $f_info, $data, $v_description, $v_chain_args);
+                    $f_info->description = $v_description;
+                    $this->_update_mark($o, $f_info, $data, null); 
                     $v_description = null;
                     break;
                 case self::T_GRAPH_ARGUMENT:
@@ -473,7 +431,8 @@ class GraphQlParser
             }
         }
         if (!empty($f_info->name)) {
-            $this->_update_mark($o, $f_info, $data, $v_description);
+            // + | last update mark
+            $this->_update_mark($o, $f_info, $data, $v_chain_args->path());
         } 
         if ($v_alias) {
             $v_alias = false;
@@ -485,14 +444,22 @@ class GraphQlParser
         igk_hook(self::HOOK_LOADING_COMPLETE, [$this, & $o]);
     }
 
-    protected function _end_graph_end($o, GraphQlData $data){
+    /**
+     * end graph reading to update value 
+     * @param mixed $o 
+     * @param GraphQlData $data 
+     * @return bool 
+     */
+    protected function _end_graph_end(GraphQlData $data):bool{
         if ($data->isProvided()){
             return false;
         }
         if ($this->m_listener){
             $v_qo = $this->m_listener->query();
             $data->storeEntry($v_qo);
+            return true;
         }
+        return false;
 
 
     }
@@ -593,29 +560,26 @@ class GraphQlParser
      * @return void 
      */
     protected function _load_spread_info(& $f_info , $e , & $o, & $p, & $q, $data, ?string $v_description=null){
-        $v_name = $e[2];
-        // if (!empty($n = $f_info->name)) {
-        //     $this->_update_mark($o, $f_info, $data, $v_description);
-        // }      
+        $v_name = $e[2]; 
         $v_s = new GraphQlSpreadInfo($v_name);  
         $o[] = $v_s;
-    
+        // go to chain properties to update fields
     }
-    protected function _update_mark(&$o, &$f_info, $data, ?string &$v_description = null, ?array $chain_args=null)
+    protected function _update_mark(&$o, &$f_info, $data, ?string $path =  null)
     {
         $n = $f_info->name;
         if (empty($n)) {
             igk_die("name is empty");
         }
-        $v_data = $data ? $data->first() : null;
-        $f_info->description = $v_description;
+        $v_data = $data ? $data->first() : null; 
         $data->storeInfo($n, $f_info);
         $v = $f_info->default;
-        if ($chain_args && $v_data){
-            // chain args to get the real value
-            $v_key = implode("/", $chain_args);
-            $v_data = igk_conf_get($v_data, $v_key); // '__schema/queryType');
-            // $v_data = $n;
+        if ($v_data && $path && !$data->isIndex()){
+            // chain path 
+            $v_data = igk_conf_get($v_data, $path); 
+            if (is_array($v_data)){
+                $v_data = igk_getv(array_values($v_data), 0);
+            }
         }
 
         // + | update last info values
@@ -624,19 +588,22 @@ class GraphQlParser
         }
         $o[$n] = $v;
         // + | create new info
-        $f_info = $this->_create_info(); 
-        $v_description = null;
+        $f_info = $this->_create_info();  
         return $n;
     }
     protected function _update_value(& $o, GraphQlData $data){
         $infos = $data->getInfo();
         $v_data = $data->first();
         $v_callback = $this->_get_model_callback();
+        foreach($o as $k=>$v){
+            if (is_numeric($k)){
+                $v->updateFields($this, $k, $o, $data, $v_data, $v_callback);
+            }
+        }
            // + | update last info values
         foreach($infos as $k=>$f_info){
             $v = $data->getValue($f_info->name, $v_data, $v_callback);
             $o[$k] = $v;
-
         }
     }
     /**

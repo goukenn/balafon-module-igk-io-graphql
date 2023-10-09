@@ -26,6 +26,16 @@ class GraphQlSpreadInfo{
             }
         }
     }
+    /**
+     * fragment to update at end list 
+     * @param mixed $parser 
+     * @param mixed $k 
+     * @param mixed $o 
+     * @param mixed $data 
+     * @param mixed $t_entry 
+     * @param mixed $callback 
+     * @return void 
+     */
     public function updateFields($parser, $k, & $o, $data, $t_entry, $callback){
         igk_reg_hook(GraphQlParser::HOOK_LOADING_COMPLETE, function($e)use($parser, $k, & $o, $data, $t_entry, $callback){
             $tparser =  $e->args[0];
@@ -33,7 +43,7 @@ class GraphQlSpreadInfo{
                 return;
             }
             $fragments = $parser->getDeclaredInputs()['fragment'];
-            $types = igk_getv($parser->getDeclaredInputs(), 'type');
+            // $types = igk_getv($parser->getDeclaredInputs(), 'type');
             unset($o[$k]);
             $f = self::_array_find_first($fragments, function($i){
                 if ($i->name === $this->m_name){

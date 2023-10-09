@@ -120,4 +120,41 @@ class GraphQlData{
     public function getInfo(){
         return $this->m_info;
     }
+
+    private function _updateArrayField(& $o, array $other, ?callable $callback=null){
+            // copy data
+            $data = $this;
+            $tab = [$o];
+            $model = array_keys($o);
+
+            while (count($other) > 0) {
+                $rp = array_shift($other);
+                $i = [];
+                foreach ($model as $k) {
+                    $i[$k] = $data->getValue($k, $rp,$callback);
+                }
+                $tab[] = $i;
+            }
+            // + | change the reference of  
+            $o = $tab;
+            $data->storeEntry(new GraphQlEmptyEntry);
+    }
+    public function updateObjectField(& $o, ?string $path=null, ?callable $callback=null){
+        $data = $this;
+        if ($data->isIndex()) {
+            // o is the modele
+            $other = array_slice($data->entry, 1);
+            $this->_updateArrayField($o, $other, $callback);
+        } else {
+            if ($path){
+                $obj = igk_conf_get($data->entry, $path);
+                if ($obj){
+                    if (is_array($obj)){
+                        $other = array_slice($obj, 1);
+                        $this->_updateArrayField($o, $other, $callback);
+                    }
+                }
+            }
+        }
+    }
 }

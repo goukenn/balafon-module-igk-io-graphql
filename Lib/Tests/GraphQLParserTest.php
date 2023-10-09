@@ -11,9 +11,12 @@ use IGK\Helper\JSon;
 use IGK\Helper\JSonEncodeOption;
 use igk\io\GraphQl\GraphQlParser;
 use igk\io\GraphQl\GraphQlQueryOptions;
+use igk\io\GraphQl\GraphQlSyntaxException;
 use IGK\System\Exceptions\EnvironmentArrayException;
 use IGK\Tests\Controllers\ModuleBaseTestCase;
 use IGKException;
+use SebastianBergmann\RecursionContext\InvalidArgumentException;
+use PHPUnit\Framework\ExpectationFailedException;
 
 ///<summary></summary>
 /**
@@ -84,7 +87,7 @@ GQL
             json_encode($obj)
         );
     }
-    public function test_parse_with_data_2()
+    public function test_parse_fwith_data_2()
     {
 
         $obj = GraphQlParser::Parse("{name,firstname,lastname,age:Int}", [
@@ -125,7 +128,9 @@ GQL
 
     public function test_parse_with_array()
     { 
+        //without entry field name - consider as globak entries data 
         $obj = GraphQlParser::Parse("{ user{ name, firstname, lastname } } ", [
+            
             [
                 'firstname' => 'C.A.D',
                 'lastname' => 'BONDJE DOUE',
@@ -137,8 +142,10 @@ GQL
             [
                 'firstname' => 'ISA',
                 'lastname' => 'HEIJERS',
-            ],
+            ]
+            ,
         ], new MockGraphListener);
+        // + | ass entry object consider as path reading model 
         $this->assertEquals(
             json_encode((object)[
                 "user" => [
@@ -472,11 +479,10 @@ GQL
             'variables'=>[
                 'uid'=>4
             ]
-        ],[], new MockGraphListener, $parser);        
+        ],null, new MockGraphListener, $parser);        
        
         
-        $this->assertEquals((object)[
-             
+        $this->assertEquals((object)[             
             'locale'=>"en" ,
             'email'=>"t4@local.test" ,            
         ],
@@ -484,6 +490,14 @@ GQL
         );
     }
 
+    /**
+     * test spread info
+     * @return void 
+     * @throws IGKException 
+     * @throws GraphQlSyntaxException 
+     * @throws InvalidArgumentException 
+     * @throws ExpectationFailedException 
+     */
     public function test_spread_read(){ 
             // query with name 
             $obj = GraphQlParser::Parse([
@@ -526,8 +540,11 @@ GQL
         // | check that chain arg ignore function list and return only access fields
         $query1 = <<<EOF
         {
+            " get all production "
             products(i: 45) {
+                " id definition "
                 id
+                " name definition "
                 name
             }
         }
