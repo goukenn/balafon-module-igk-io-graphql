@@ -4,7 +4,7 @@
 
 version : 1.0
 
-### The simple graphQL base implementation to get or mutate data from balafon 
+### Simple graphQL base implementation to get or mutate data from balafon Framework
 
 
 ```graphql

@@ -43,7 +43,6 @@ class GraphQlSpreadInfo{
                 return;
             }
             $fragments = $parser->getDeclaredInputs()['fragment'];
-            // $types = igk_getv($parser->getDeclaredInputs(), 'type');
             unset($o[$k]);
             $f = self::_array_find_first($fragments, function($i){
                 if ($i->name === $this->m_name){
@@ -53,7 +52,6 @@ class GraphQlSpreadInfo{
             foreach($f->getFields() as $tf){
                 $o[$tf] = $data->getValue($tf, $t_entry, $callback);
             }
-            // no fragement field found.
         });
     }
 }
