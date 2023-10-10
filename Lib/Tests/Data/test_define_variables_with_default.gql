@@ -1,0 +1,5 @@
+query basic($dat : Int = 9){
+    info(size: $dat){
+        name
+    }
+}

@@ -1,0 +1,4 @@
+# test_invoke_query_method_from_listener_missing_props
+{
+    testMissingLogin
+}

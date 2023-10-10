@@ -18,4 +18,12 @@ interface IGraphQlMappingData{
      * @return mixed 
      */
     public function getMappingValue(string $name, $default=null);
+
+
+    /**
+     * return mapping data
+     * @param null|callable $mapping 
+     * @return null|array 
+     */
+    public function getMappingData(?callable $mapping=null):?array;
 }

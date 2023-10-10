@@ -1,0 +1,16 @@
+userList{
+    name
+    firstname
+}
+
+productList{
+    title,
+    codebar
+}
+
+bookList{
+    title,
+    describe(uid:id){
+
+    }
+}

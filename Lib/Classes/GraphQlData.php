@@ -4,6 +4,7 @@
 // @date: 20221106 08:26:16
 namespace igk\io\GraphQl;
 
+use igk\io\GraphQl\GraphQlData as GraphQlGraphQlData;
 use IGK\Models\ModelBase;
 use IGKException;
 use IGKSysUtil as sysutil;
@@ -69,7 +70,11 @@ class GraphQlData{
         $this->m_is_index = ($data && is_array($data) && !igk_array_is_assoc($data));
         $this->m_isProvided = true;
     }
-    public function isIndex(){
+    /**
+     * get if indexed 
+     * @return bool 
+     */
+    public function isIndex(): bool{
         return $this->m_is_index;
     }
 
@@ -137,7 +142,7 @@ class GraphQlData{
             }
             // + | change the reference of  
             $o = $tab;
-            $data->storeEntry(new GraphQlEmptyEntry);
+            // $data->storeEntry(new GraphQlEmptyEntry);
     }
     public function updateObjectField(& $o, ?string $path=null, ?callable $callback=null){
         $data = $this;
@@ -156,5 +161,11 @@ class GraphQlData{
                 }
             }
         }
+    }
+    public static function IsIndexed($data):bool{
+        if ($data instanceof GraphQlData){
+            return $data->isProvided() && $data->isIndex();
+        } 
+        return (is_array($data) && !igk_array_is_assoc($data));
     }
 }

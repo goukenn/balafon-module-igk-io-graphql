@@ -1,0 +1,7 @@
+# invoke listener user data
+{
+    users(){
+        name
+        login
+    }
+}

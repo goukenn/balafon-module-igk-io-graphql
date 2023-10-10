@@ -3,7 +3,7 @@
 // @file: GraphQlChainGraph.php
 // @date: 20231009 09:41:59
 namespace igk\io\GraphQl;
-use igk\io\GraphQl\GraphQlParser as gParser;
+use igk\io\GraphQl\GraphQlReaderConstants as gParser;
 
 
 ///<summary></summary>
@@ -23,14 +23,14 @@ class GraphQlChainGraph{
         $chain_args = & $this->m_chainList;
         $p = & $this->m_parent;
         switch($id){
-            case gParser::T_GRAPH_START:
+            case gParser::T_READ_START:
                 if ($chain_start){
                     // + | append entry fields
                     $chain_args[] = null;
                 }
                 $chain_start = 1;
                 break;
-            case gParser::T_GRAPH_END:
+            case gParser::T_READ_END:
                 if (empty($chain_args)){
                     // + | section pop 
                     if ($p){
@@ -41,14 +41,14 @@ class GraphQlChainGraph{
                 // + || prop arg entry
                 array_pop($chain_args);
                 break;
-            case gParser::T_GRAPH_NAME: 
+            case gParser::T_READ_NAME: 
                 if ($chain_start){
                     // + | replace last argument 
                     array_pop($chain_args);
                     $chain_args[] = $v;
                 }
                 break;
-            case gParser::T_GRAPH_ARGUMENT:
+            case gParser::T_READ_ARGUMENT:
                 // + | remove last argument from chain list 
                 array_pop($chain_args);                
                 // start new reading section 

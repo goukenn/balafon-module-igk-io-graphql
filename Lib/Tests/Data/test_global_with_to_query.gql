@@ -1,0 +1,12 @@
+# entry query definition 
+"""
+read global section 
+"""
+{
+    name 
+}
+
+{
+    email,
+    name
+}

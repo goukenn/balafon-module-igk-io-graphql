@@ -17,6 +17,7 @@ use ReflectionMethod;
 /**
  * parse custom graphQL 
  * @package igk\io\GraphQl
+ * @deprecated use GraphQlParse2 insteed
  */
 class GraphQlParser
 {
@@ -54,7 +55,7 @@ class GraphQlParser
     const T_GRAPH_DEFAULT = 5;
     const T_GRAPH_ARGUMENT = 6;
     const T_GRAPH_COMMENT = 7;
-    const T_GRAPH_INTROPECTION = 8;
+    const T_GRAPH_INTROSPECTION = 8;
     const T_GRAPH_DECLARE_TYPE = 9;
     const T_GRAPH_DECLARE_INPUT = 10;
     const T_GRAPH_TYPE_DEFINITION = 11;
@@ -813,7 +814,7 @@ class GraphQlParser
                             $n = trim($l);
                             if (!empty($n)){
                                 if (strpos($n, "__") === 0) {
-                                    $this->m_token = [self::T_GRAPH_INTROPECTION, $n];
+                                    $this->m_token = [self::T_GRAPH_INTROSPECTION, $n];
                                     return true;
                                 }
                                 $token = $this->_get_token($n) ?? self::T_GRAPH_NAME;

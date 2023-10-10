@@ -1,0 +1,7 @@
+basic($dat:int = 6 ){
+    name
+    first
+    info($dat: 9){
+
+    }
+}

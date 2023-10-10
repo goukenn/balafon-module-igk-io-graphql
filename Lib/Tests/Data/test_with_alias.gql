@@ -1,0 +1,6 @@
+# test chain with alias
+query userList{
+    name: presentation(){
+        name
+    }
+}

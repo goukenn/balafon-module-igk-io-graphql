@@ -1,0 +1,3 @@
+query userList{
+    name @simpleDirective(name:0)
+}
