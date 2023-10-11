@@ -25,7 +25,7 @@ class GraphQlUpdateField{
         $this->m_def = $def;
         $this->m_data = $data;
         $this->m_source = & $o;
-        $HookKEY = GraphQlHooks::HookName(GraphQlHooks::HOOK_END_INFO);
+        $HookKEY = GraphQlHooks::HookName(GraphQlHooks::HOOK_END_SECTION);
 
         $fc = function($e)use(& $fc, $HookKEY){
             list($reader, $section) = $e->args;
@@ -35,7 +35,7 @@ class GraphQlUpdateField{
             $this->m_source[$this->m_name] = $this->update();
             igk_unreg_hook($HookKEY, $fc);
         };
-        igk_reg_hook(GraphQlHooks::HookName(GraphQlHooks::HOOK_END_INFO), $fc);
+        igk_reg_hook(GraphQlHooks::HookName(GraphQlHooks::HOOK_END_SECTION), $fc);
     } 
     /**
      * retrieve all value field

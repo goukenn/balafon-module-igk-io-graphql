@@ -28,4 +28,10 @@ class GraphQlReaderConstants{
     const T_READ_DIRECTIVE = 10;
 
     const T_READ_ARGUMENT = 11;
+    const T_READ_FRAGMENT  = 12;
+    const T_READ_SPEAR = 13;
+
+    const RESERVED_WORD = 'true|false|null|schema|query|type|enum|mutation';
+    const SPEAR_OPERATOR = '...';
+
 }

@@ -11,6 +11,10 @@ namespace igk\io\GraphQl;
 * @package igk\io\GraphQl
 */
 class GraphQlPropertyInfo extends GraphQlDocProperty{
+    const TYPE_SPEAR = 'spear';
+    const TYPE_FUNC = 'func';
+    const TYPE_QUERY = 'query';
+    const TYPE_DECLARATION = 'declaration';
     var $name;
     var $alias;
     /**

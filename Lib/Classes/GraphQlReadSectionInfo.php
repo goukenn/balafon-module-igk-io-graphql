@@ -88,12 +88,21 @@ class GraphQlReadSectionInfo extends GraphQlDocProperty{
         if (is_null($data)){
             return null;
         }
-        if($this->throwException && !igk_key_exists($data, $key)){
-            throw new GraphQlSyntaxException(sprintf('missing property [%s]', $key));
+        if($data && $this->throwException && !igk_key_exists($data, $key)){
+             throw new GraphQlSyntaxException(sprintf('missing property [%s]', $key));
         }
         $v = igk_getv($data, $key, $v_def);        
         return $v; 
         
+    }
+    public function getFullPath(): ?string{
+        $p = [];
+        $q = $this->parent;
+        while($q){
+            array_unshift($p, $q->name);
+            $q = $q->parent; 
+        }
+        return implode('/', array_filter($p));
     }
     /**
      * get data 
@@ -134,6 +143,11 @@ class GraphQlReadSectionInfo extends GraphQlDocProperty{
             $source = $source->getMappingData($mapping);
         }
         foreach($this->properties as $k=>$def){
+            if ($def instanceof GraphQlSpreadIndex){
+                $o[] = null;
+                continue;
+            }
+
             if ($def->child){
                 // skip child definition property and wait to complete 
                 continue;
@@ -145,13 +159,17 @@ class GraphQlReadSectionInfo extends GraphQlDocProperty{
     }
     private function _getIndexedData(array $data, ?callable $mapping=null){
         $tab = [];
+        $_HOOK_KEY = GraphQlHooks::HookName(GraphQlHooks::HOOK_END_ENTRY);
         while(count($data)>0){
             $q = array_shift($data);
             if (!$q){
                 continue;
             }
             $o = $this->_getFieldData($q, $mapping);  
-            $tab[] = $o;
+            igk_hook($_HOOK_KEY, [$this, $q, & $o]);
+            $tab[] = & $o;
+            unset($o);
+            $o = null;
         }  
         return $tab;
     }

@@ -167,6 +167,28 @@ class GraphQlParser2Test extends ModuleBaseTestCase{
         $this->assertEquals('{"users":{"name":"CHARLES"}}', 
         json_encode($o));
     }
+
+
+    /**
+     * test graph ql fragment
+     * @return void 
+     * @throws IGKException 
+     * @throws GraphQlSyntaxException 
+     * @throws ArgumentTypeNotValidException 
+     * @throws ReflectionException 
+     * @throws InvalidArgumentException 
+     * @throws ExpectationFailedException 
+     */
+    public function test_graph_with_fragment(){  
+        $o = GraphQlParser2::Parse(['query'=>'{fragmentUsers{login ...address}} fragment address on User{ street number box }', 'variables'=>[
+            'key'=>1
+        ]],null, new GraphQlFragmentTestListener); 
+        $this->assertEquals('{"fragmentUsers":[{"login":"cbondje@igkdev.com","street":"A","number":10,"box":"J"},{"login":"bondje.doue@igkdev.com","street":"B","number":7,"box":"G"}]}', 
+        json_encode($o));
+    }
+
+
+
     // public function test_parsing_query(){
     //     $d = GraphQlParser2::Parse($this->_lib(__FUNCTION__),null, null);
     //     $this->assertEquals(

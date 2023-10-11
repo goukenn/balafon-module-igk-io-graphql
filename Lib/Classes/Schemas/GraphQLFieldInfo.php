@@ -7,7 +7,7 @@ namespace igk\io\GraphQl\Schemas;
 
 ///<summary></summary>
 /**
-* 
+* used to declare field 
 * @package igk\io\GraphQl\Schemas
 */
 class GraphQLFieldInfo
@@ -42,12 +42,16 @@ class GraphQLFieldInfo
      * argument for method type
      * @var ?object
      */
-    var $args;
-
-
+    var $args;   
     /**
      * field description
      * @var ?string
      */
     var $description;
+
+    var $alias;
+
+    public function getKey(){
+        return $this->alias ?? $this->name;
+    }
 }

@@ -77,6 +77,14 @@ class GraphQlParser2
      */
     private $m_loadInput;
 
+    /**
+     * get declared input 
+     * @return ?array
+     */
+    public function getDeclaredInputs():?array{
+        return $this->m_declaredInput; 
+    }
+
     protected function __construct()
     {
     }
@@ -162,7 +170,7 @@ class GraphQlParser2
                         if ($this->m_listener) {
                             $args = $v;
 
-                            $v_property_info->type = 'func';
+                            $v_property_info->type = GraphQlPropertyInfo::TYPE_FUNC;
                             $v_property_info->args = $args;
                             $v_key = $v_property_info->getKey();
                             // $v_section_info = $this->_chain_info($v_section_info);
@@ -188,6 +196,24 @@ class GraphQlParser2
                         throw new GraphQlSyntaxException('directive not allowed');
                     }
                     break;
+                case rConst::T_READ_SPEAR:
+                    $name = $e[2];
+                    // new property and name
+                    $this->_update_last_property($o, $v_property_info, $data);
+                    $v_property_info = $this->_add_new_property($name, $v_desc, $v_property_alias,$v_section_info);
+                    $v_property_info->type = GraphQlPropertyInfo::TYPE_SPEAR; 
+                    $sp = new GraphQlSpreadInfo($this, $o, $name, $v_property_info);
+                    // + | remove section from object data
+                    unset($v_section_info->properties[$name]);
+
+                    $o[] = $sp;
+                    $v_sp = array_key_last($o);
+                    $sp->key = $v_sp;
+                    $v_property_name = null;
+
+                    $v_section_info->properties[$name] = new GraphQlSpreadIndex($v_sp, $v_property_info);
+                    $v_fc_clear();
+                    break;
                 case rConst::T_READ_NAME:
                     if ($v_brank == 0) {
                         if ($v_def_name) {
@@ -203,15 +229,10 @@ class GraphQlParser2
                         }
 
                         $this->_update_last_property($o, $v_property_info, $data);
-
-                        $v_property_info = new GraphQlPropertyInfo($v);
-                        $v_property_info->alias = $v_property_alias;
-                        $v_property_info->section = $v_section_info;
-                        $v_property_info->description = $v_desc;
-                        $v_property_name = $v;
-                        $v_section_info->properties[$v] = $v_property_info;
+                        $v_property_info = $this->_add_new_property($v, $v_desc, $v_property_alias,$v_section_info);
                         $v_property_alias = null;
                         $v_desc = null;
+                        $v_property_name = $v;
                     }
                     break;
                 case rConst::T_READ_ALIAS:
@@ -257,8 +278,8 @@ class GraphQlParser2
                         $v_current_data_def = new GraphQlPointerObject($v_new_o, $v_current_data_def);
                         $o = &$v_new_o;
                         $v_bind_section = true;
-                        if ($v_property_info->type == 'func') {
-                            $v_section_info->type = 'func';
+                        if ($v_property_info->type == GraphQlPropertyInfo::TYPE_FUNC) {
+                            $v_section_info->type = $v_property_info->type ;
                         }
                     }
                     $v_brank++;
@@ -276,7 +297,7 @@ class GraphQlParser2
                         throw new GraphQlSyntaxException("missing property in section");
                     }
                     $this->_update_last_property($o, $v_property_info, $data);
-                    if ($v_section_info->type == 'func') {
+                    if ($v_section_info->type == GraphQlPropertyInfo::TYPE_FUNC) {
                         // invoke function and 
                         igk_hook(GraphQlHooks::HookName(GraphQlHooks::HOOK_SECTION_FUNC), [$this, $v_section_info, $data]);
                     } else {
@@ -335,6 +356,14 @@ class GraphQlParser2
             return $v_list;
         }
         return (object)$o;
+    }
+    protected function _add_new_property(string $name, ?string $desc, ?string $alias, GraphQlReadSectionInfo $section){
+        $v_property_info = new GraphQlPropertyInfo($name);
+        $v_property_info->alias = $alias;
+        $v_property_info->section = $section;
+        $v_property_info->description = $desc;
+        $section->properties[$name] = $v_property_info;
+        return $v_property_info;
     }
 
     protected function _init_child_property(&$o, string $v_key, GraphQlPropertyInfo $v_property_info, $data)
@@ -510,7 +539,14 @@ class GraphQlParser2
 
     protected function _endLoading(GraphQlReadSectionInfo $info, $data)
     {
-        igk_hook(Path::Combine(GraphQlHooks::class, GraphQlHooks::HOOK_END_INFO), [$this, $info, $data]);
+        if ($data instanceof GraphQlData){
+            if ($info->parent){
+                $path = $info->getFullPath();//->name
+                $data = igk_conf_get($data->entry, $path);
+            }
+
+        }
+        igk_hook(Path::Combine(GraphQlHooks::class, GraphQlHooks::HOOK_END_SECTION), [$this, $info, $data]);
     }
 
     /**
@@ -565,6 +601,20 @@ class GraphQlParser2
             }
             $offset++;
             switch ($ch) {
+                case '.':
+                        // + | check for fragment 
+                    if (($v_spead = $ch . substr($this->m_query, $offset, 2)) == rConst::SPEAR_OPERATOR) {
+                        $v_d = [rConst::T_READ_SPEAR, $v_spead];
+                        $offset += 2;
+                        $v_name = $this->_read_name($offset);
+                        if (empty($v_name)){
+                            throw new GraphQlSyntaxException("spear operation missing name");
+                        }
+                        $v_d[] = $v_name;
+                        $this->m_token = $v_d;
+                        return true;
+                    }
+                    break;
                 case '(': // read argument definition
                     return $this->_read_func_args();
                 case ')':
@@ -625,8 +675,7 @@ class GraphQlParser2
         return true;
     }
     protected function _read_directive(): bool
-    {
-
+    { 
         $n = $this->_read_name();
         $d = new GraphQlDirectiveInfo;
         $d->name = $n;
@@ -782,7 +831,7 @@ class GraphQlParser2
         $r_name = $name;
         $v_injector = Dispatcher::GetInjectTypeInstance(GraphQlQueryOptions::class,null);
         $fc = new ReflectionMethod($this->m_listener, $r_name);
-        $v_type = 'query'; 
+        $v_type = 'query'; // mutation
         $params = $this->_getMethodParameter($args, $v_type, $v_injector);
         $pc = count($params);
         $tc = $fc->getNumberOfRequiredParameters();
@@ -832,5 +881,13 @@ class GraphQlParser2
         }
 
         return $tab;
+    }
+
+    /**
+     * expose read name
+     * @return string 
+     */
+    public function readName(){
+        return $this->_read_name();
     }
 }

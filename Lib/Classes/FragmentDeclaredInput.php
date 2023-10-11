@@ -45,7 +45,7 @@ class FragmentDeclaredInput extends GraphQlDeclaredInput{
         if(is_null($this->name)){
             
             if (is_null($this->name = $reader->readName())){
-                throw new GraphQlSyntaxException('missing name');
+                throw new GraphQlSyntaxException('missing fragment name');
             } 
         }
         $v_fields = & $this->m_fields;
@@ -53,7 +53,7 @@ class FragmentDeclaredInput extends GraphQlDeclaredInput{
         $v_description = null;
         $field = null;
         while(!$v_end && $reader->read()){
-            $e = $reader->getToken(); // s->m_token;
+            $e = $reader->token(); // s->m_token;
             if (! $v_readon && ($e[1]=='on')){ 
                 $v_readon = true;
                 if (is_null($v_type = $reader->readName() )){
@@ -74,7 +74,7 @@ class FragmentDeclaredInput extends GraphQlDeclaredInput{
 
             switch($e[0]){
                 
-                case GraphQlParser::T_GRAPH_END:
+                case GraphQlReaderConstants::T_READ_END:
                     $v_level--;
                     if ($v_level===0){
                         $v_end = true;
@@ -86,7 +86,7 @@ class FragmentDeclaredInput extends GraphQlDeclaredInput{
                         }
                     }                    
                     break;
-                case GraphQlParser::T_GRAPH_START:
+                case GraphQlReaderConstants::T_READ_START:
                     if ($p===null){
                         $p = [];
                     }else{
@@ -101,7 +101,7 @@ class FragmentDeclaredInput extends GraphQlDeclaredInput{
                     }
                     $v_level++;
                     break;
-                case GraphQlParser::T_GRAPH_NAME:
+                case GraphQlReaderConstants::T_READ_NAME:
                     if ($v_level>0){
                         $field = new GraphQLFieldInfo;
                         $n = $e[1];
@@ -122,7 +122,10 @@ class FragmentDeclaredInput extends GraphQlDeclaredInput{
         }
         return true;
     }
-    public function getFields(){
+    public function getFieldKeys(){
         return array_keys($this->m_fields);
+    }
+    public function getFields(){
+        return $this->m_fields;
     }
 }
