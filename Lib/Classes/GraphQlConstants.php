@@ -13,4 +13,5 @@ namespace igk\io\GraphQl;
 class GraphQlConstants{
     public const MIME_TYPE = 'application/graphql';
     public const HEADER_CONTENT_TYPE = 'Content-Type: '.self::MIME_TYPE;
+    public const SCHEMAS_CLASS_DEF_SUFFIX = 'SchemaDefinition';
 }

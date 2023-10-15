@@ -10,7 +10,7 @@ namespace igk\io\GraphQl\Schemas;
 * 
 * @package igk\io\GraphQl\Schemas
 */
-class GraphQLType
+class GraphQlType
 {
     const TYPES = 'ID|Boolean|Int|Float|String';
     public static function GetTypeFromDbColumnInfo($info)

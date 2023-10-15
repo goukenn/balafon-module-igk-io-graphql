@@ -4,7 +4,7 @@
 // @date: 20230921 17:58:55
 namespace igk\io\GraphQl;
 
-use igk\io\GraphQl\Schemas\GraphQLFieldInfo;
+use igk\io\GraphQl\Schemas\GraphQlFieldInfo;
 use IGKException;
 use IGK\System\Exceptions\ArgumentTypeNotValidException;
 use ReflectionException;
@@ -103,7 +103,7 @@ class FragmentDeclaredInput extends GraphQlDeclaredInput{
                     break;
                 case GraphQlReaderConstants::T_READ_NAME:
                     if ($v_level>0){
-                        $field = new GraphQLFieldInfo;
+                        $field = new GraphQlFieldInfo;
                         $n = $e[1];
                         if (empty($n)){
                             throw new GraphQlSyntaxException("name is empty");

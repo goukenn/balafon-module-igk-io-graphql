@@ -4,6 +4,7 @@
 // @date: 20231009 17:41:29
 namespace igk\io\GraphQl;
 
+use Closure;
 use IGK\Database\Mapping\Traits\ModelMappingDataTrait;
 use igk\io\GraphQl\GraphQlReadSectionInfo as GraphQlGraphQlReadSectionInfo;
 use igk\io\GraphQl\Helper\GraphQlReaderUtils;
@@ -114,11 +115,13 @@ class GraphQlReadSectionInfo extends GraphQlSectionProperty{
             if ($mapping && $tn){ 
                 $map_data = $mapping($tn); 
                 if ($map_data){
-                    $b = $data->map($map_data); 
-                    $this->_resolvData($b, $key, $v_def); 
+                    // $b = $data->map($map_data); 
+                    $data = $data->map($map_data); 
+                    //return $this->_resolvData($b, $key, $v_def); 
                 }
             } 
         }
+        // igk_wln_e("the data", $data, $key);
         return $this->_resolvData($data, $key, $v_def, $optional);
     }
     /**
@@ -137,7 +140,13 @@ class GraphQlReadSectionInfo extends GraphQlSectionProperty{
         if($data && !$optional && !$this->noThrowOnMissingProperty && !igk_key_exists($data, $key)){
              throw new GraphQlSyntaxException(sprintf('missing property [%s]', $key));
         }
-        $v = igk_getv($data, $key, $v_def);        
+        $v = igk_getv($data, $key, $v_def);  
+        // system pass closure so
+        if ($v instanceof Closure){
+            $newv = $v();
+            $this->m_reader->updateSourceData($data, $key, $newv);
+            return $newv;
+        }      
         return $v; 
         
     }
