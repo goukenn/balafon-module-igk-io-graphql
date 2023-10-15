@@ -7,7 +7,7 @@ namespace igk\io\GraphQl;
 
 ///<summary></summary>
 /**
-* use to manage pointer on array with parent ist 
+* use to manage pointer on array with parent
 * @package igk\io\GraphQl
 */
 class GraphQlPointerObject{

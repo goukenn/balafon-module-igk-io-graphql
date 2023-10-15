@@ -1,0 +1,12 @@
+"""
+passing sub field
+"""
+
+{
+    name
+    profiles{
+        picture
+        size
+        loc=-1
+    }
+}

@@ -13,8 +13,12 @@ use IGK\System\Traits\HookNameTrait;
 * @package igk\io\GraphQl
 */
 abstract class GraphQlHooks{
-    const HOOK_END_SECTION = 'endInfo';
+    const HOOK_END_SECTION = 'endSection';
     const HOOK_LOAD_COMPLETE= 'loadComplete';
+    /**
+     * invoke when root level of a query reach
+     */
+    const HOOK_END_QUERY = 'hookEndQuerySection'; 
     const HOOK_END_ENTRY = 'endEntry';
     const HOOK_SECTION_FUNC = 'hookSectionFunc';
     use HookNameTrait;

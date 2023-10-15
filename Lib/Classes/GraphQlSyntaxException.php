@@ -10,6 +10,6 @@ namespace igk\io\GraphQl;
 * 
 * @package igk\io\GraphQl
 */
-class GraphQlSyntaxException extends \Exception{
+class GraphQlSyntaxException extends GraphQlException{
     
 }

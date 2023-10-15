@@ -11,5 +11,10 @@ namespace igk\io\GraphQl;
 * @package igk\io\GraphQl
 */
 interface IGraphQlInspector{
+    /**
+     * retrieve source typename
+     * @return null|string 
+     */
+    function getSourceTypeName(): ?string;
     function query();
 }

@@ -84,4 +84,30 @@ by default reseverd fields arguments
 
 
 
+
+
+
+- switch to model detection of DataModel Or Listener 
+
+```php
+
+GraphQlParser::Parse($query_or_query_data, $data_or_source_listener);
+
+```
+
+
+
+```php
+// with option -  options are variables
+GraphQlParser::ParseWithOption($options, $query_or_query_data, $data_or_source_listener);
+
+```
+
+- by default if the query have a single entry result the name will be skipped as a shortant result.
+- modify options on query command 
+    - # %noSkipFirstNamedQueryEntry% disable name entry skipping
+    - # %
+
+
+
 2023 @ C.A.D. BONDJE DOUE

@@ -11,9 +11,10 @@ namespace igk\io\GraphQl;
 * @package igk\io\GraphQl
 */
 class GraphQlReaderConstants{
-    const T_TOKEN_NAME='_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const T_TOKEN='_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
     const T_SPREAD_OPERATOR = '...';
     const T_LITTERAL_DECLARATION='query|mutation|directive';
+    const T_RESERVED_PROPERTIES = '__type';
 
     
     const T_READ_NAME=1;
@@ -30,6 +31,9 @@ class GraphQlReaderConstants{
     const T_READ_ARGUMENT = 11;
     const T_READ_FRAGMENT  = 12;
     const T_READ_SPEAR = 13;
+    const T_READ_INLINE_SPEAR = 14;
+    // extra default value for query inline definition - not in specification for query read
+    const T_READ_DEFAULT_VALUE = 15;
 
     const RESERVED_WORD = 'true|false|null|schema|query|type|enum|mutation';
     const SPEAR_OPERATOR = '...';

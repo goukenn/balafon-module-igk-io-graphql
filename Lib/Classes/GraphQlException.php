@@ -4,12 +4,13 @@
 // @date: 20231011 12:22:05
 namespace igk\io\GraphQl;
 
+use IGKException;
 
 ///<summary></summary>
 /**
 * 
 * @package igk\io\GraphQl
 */
-class GraphQlException extends \Exception{
+class GraphQlException extends IGKException{
     
 }

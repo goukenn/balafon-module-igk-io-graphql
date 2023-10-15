@@ -11,7 +11,7 @@ use IGKEvents;
 * use to load spread variable info 
 * @package igk\io\GraphQl
 */
-class GraphQlSpreadInfo{
+class GraphQlSpreadInfo implements IGraphQlProperty{
     /**
      * source name of the spread operator 
      * @var string
@@ -23,30 +23,40 @@ class GraphQlSpreadInfo{
      */
     var $key;
 
+    private $is_single = true;
+
     private $m_refOuput;
     private $m_entryData;
-    public function __construct(GraphQlParser2 $reader, & $o, string $name, GraphQlPropertyInfo $property_info)
+    private $m_property_info;
+
+    public function & getRefOutput(){
+        return $this->m_refOuput;
+    } 
+
+    public function __construct(GraphQlParser $reader, GraphQlReferenceArrayObject $o, string $name, GraphQlPropertyInfo $property_info, $soureData = null)
     {
         
         empty($name) && igk_die_exception(GraphQlException::class, 'name is empty');
-        $this->m_name = $name;
+        $this->key = $name;
+        $this->m_name = trim($name,'.');
+        $this->m_refOuput = $o;
+        $this->m_entryData = $soureData;
+        $this->m_property_info = $property_info;
+        
         $v_fragment_info = null; 
-        $v_fc = function($e)use($property_info){
-           
-            list($v_section, $data, & $outdata)=$e->args;
-            if ($property_info->section !== $v_section){
-                return;
-            }
+      
 
-            $this->m_refOuput[] = [& $outdata, $data]; 
-            unset($outdata);
-        };
-        $v_complete_fc = function ($e) use($reader,  & $v_fragment_info){
+        $v_complete_fc = function ($e) use($reader,  & $v_fragment_info, $property_info){
             list($v_reader) = $e->args;
             if ($v_reader !== $reader){
                 return;
-            }
-            $outdata = & $this->m_refOuput;
+            } 
+            $outdata = $this->m_refOuput;
+            // $fields = GraphQlReadSectionInfo::$sharedProperties;
+            // //igk_wln_e("check is ook ", self::$sm_sharedData === $outdata);
+            // $tab1 = & $fields['shared:1'];
+            // $tab2 = & $fields['shared:2'];
+
             if (is_null($v_fragment_info)){
                 $fragment = igk_getv($reader->getDeclaredInputs(), 'fragment'); 
                 is_null($fragment) && igk_die_exception(GraphQlSyntaxException::class, 'missing fragment definition');
@@ -57,45 +67,56 @@ class GraphQlSpreadInfo{
                     }
                 }) ?? igk_die_exception(GraphQlSyntaxException::class, 'missing fragment');
             }
+            if (!$this->onType($v_fragment_info)){
+                unset($outdata[$this->key]);
+                unset($outdata);
+                return;
+            }
+
+
             $tab = [];
-            $tq = $this->m_refOuput;
+            $tq = [];
             $pos = null;
+            if ($this->is_single){
+                $tq = [[$this->m_refOuput, $this->m_entryData]];
+            }
             while(count($tq)>0){
                 $q = array_shift($tq);
-                list(& $outdata, $data) = $q; 
+                list($outdata, $data) = $q; 
                 $this->m_entryData = $data;
                 foreach($v_fragment_info->getFields() as $k=>$v){
                     $v_key = $v->getKey();
                     $tab[$v_key] = $this->getData($v);
-                }
-
-                $pos = $pos ?? array_search($this->key, array_keys($outdata));
-                $t3 = array_slice($outdata, 0, $pos+1, true ) + $tab +  array_slice($outdata, $pos, count($outdata)-$pos, true );
-                unset($t3[$this->key]);
-                $outdata = $t3;
+                } 
+                $outdata->replaceWith($tab, $this->key);
+                // $pos = $pos ?? array_search($this->key, array_keys($outdata));
+                // $t3 = array_slice($outdata, 0, $pos+1, true ) + $tab +  array_slice($outdata, $pos, count($outdata)-$pos, true );
+                // unset($t3[$this->key]);
+                // $outdata = $t3;
+                // unset($outdata);
+                // $outdata = null;
 
             }
             // update fields 
-            // $outdata['number'] = 'number';
-            // $outdata['street'] = 'street';
-            // $outdata['box'] = 'box';  
-            unset($outdata);
-            $outdata = null;
 
         };
 
-        igk_reg_hook(GraphQlHooks::HookName(GraphQlHooks::HOOK_END_ENTRY), $v_fc);
+        // igk_reg_hook(GraphQlHooks::HookName(GraphQlHooks::HOOK_END_ENTRY), $v_fc);
         igk_reg_hook(GraphQlHooks::HookName(GraphQlHooks::HOOK_LOAD_COMPLETE), $v_complete_fc);
 
        
         IGKEvents::UnregComplete(GraphQlHooks::HookName(GraphQlHooks::HOOK_LOAD_COMPLETE), 
         function()use(& $v_fc, & $v_complete_fc){
-            igk_unreg_hook(GraphQlHooks::HookName(GraphQlHooks::HOOK_END_ENTRY), $v_fc);
+            // igk_unreg_hook(GraphQlHooks::HookName(GraphQlHooks::HOOK_END_ENTRY), $v_fc);
             igk_unreg_hook(GraphQlHooks::HookName(GraphQlHooks::HOOK_LOAD_COMPLETE), $v_fc);
         });
     }
     public function getData($g){
         return igk_getv($this->m_entryData, $g->name); 
+    }
+
+    public function onType($fragment):bool{
+        return $fragment->onType($this->m_property_info->section); 
     }
     
     // public function update(& $o, $types){

@@ -128,4 +128,9 @@ class FragmentDeclaredInput extends GraphQlDeclaredInput{
     public function getFields(){
         return $this->m_fields;
     }
+
+    public function onType(GraphQlReadSectionInfo $section):bool{
+        empty($this->on) && igk_die("missing on declaration"); 
+       return $section->getSourceTypeName() == $this->on; 
+    }
 }

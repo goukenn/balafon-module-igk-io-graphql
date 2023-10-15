@@ -10,13 +10,19 @@ namespace igk\io\GraphQl;
 * 
 * @package igk\io\GraphQl
 */
-class GraphQlPropertyInfo extends GraphQlDocProperty{
+class GraphQlPropertyInfo extends GraphQlDocProperty implements IGraphQlProperty{
     const TYPE_SPEAR = 'spear';
     const TYPE_FUNC = 'func';
     const TYPE_QUERY = 'query';
     const TYPE_DECLARATION = 'declaration';
     var $name;
     var $alias;
+    var $args_expression;
+
+    public function __debugInfo()
+    {
+        return [];
+    }
     /**
      * property type 
      * @var mixed query|func
@@ -41,10 +47,10 @@ class GraphQlPropertyInfo extends GraphQlDocProperty{
     var $section;
 
     /**
-     * is a child property section 
+     * as child property section 
      * @var ?bool
      */
-    var $child;
+    var $hasChild;
 
     /**
      * the default property value
@@ -57,13 +63,39 @@ class GraphQlPropertyInfo extends GraphQlDocProperty{
      * @var mixed
      */
     var $args;
+
+
+    /**
+     * 
+     * @var false
+     */
+    var $optional = false;
+
+    /**
+     * 
+     * @var mixed
+     */
+    private  $m_child_section;
    
+    public function getChildSection(){
+        return $this->m_child_section;
+    }
+    public function setChildSection(?GraphQlReadSectionInfo $section){
+        $this->m_child_section = $section;
+    }
     public function __construct(string $name)
     {
         $this->name = $name;
         $this->directives = [];
-        $this->child = false;
+        $this->hasChild = false;
         $this->type = 'query';
+    }
+    /**
+     * check for property reserverd 
+     * @return bool 
+     */
+    public function isReservedProperty():bool{
+        return in_array($this->name, ['__typename','__schema']);
     }
     public function createPropertyResolutionValue($data){ 
         return null;
@@ -74,5 +106,9 @@ class GraphQlPropertyInfo extends GraphQlDocProperty{
      */
     public function getKey(){
         return $this->alias ?? $this->name;
+    }
+
+    public function getValue($data){ 
+        return igk_getv($data, $this->name, $this->default);
     }
 }

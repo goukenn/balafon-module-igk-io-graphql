@@ -4,6 +4,8 @@
 // @date: 20221105 17:47:07
 namespace igk\io\GraphQl\Tests;
 
+use igk\io\GraphQl\GraphQlQueryOptions;
+use igk\io\GraphQl\IGraphQlInspector;
 use igk\io\GraphQl\IGraphQlMapDataResolver;
 use IGK\Models\Users;
 use IGKException;
@@ -13,7 +15,23 @@ use IGKException;
 * 
 * @package IGK
 */
-class MockGraphListener implements IGraphQlMapDataResolver{
+class MockGraphListener implements IGraphQlInspector, IGraphQlMapDataResolver{
+
+    private $m_source;
+    private $m_sourceType;
+
+    public function checkIsInMutation(GraphQlQueryOptions $options=null){
+        return [
+            "type"=>$options->getContext() == 'mutation'
+        ];
+    }
+    public function getSourceTypeName(): ?string
+    {
+        return $this->m_sourceType;
+    }
+    public function setSource($source){
+        $this->m_source = $source;
+    }
     public function user($id=null){ 
         return [
             "name"=>"user1",
@@ -64,12 +82,19 @@ class MockGraphListener implements IGraphQlMapDataResolver{
             'clLocale'=>'locale'
         ]], $typeName);
     }
-    public function updateUser(string $name){
+    /**
+     * call in mutation to update an user.
+     * @param string $name 
+     * @return string[] 
+     */
+    public function updateUser(string $name, GraphQlQueryOptions $options=null){
+        
         return [
             "name"=>$name."_update", 
         ];
     }
     public function updateUserArray(string $name){
+        igk_debug_wln('call :'.__METHOD__);
         return [
             ["name"=>$name."_update"],
             ["name"=>$name."_2update"],
@@ -93,8 +118,13 @@ class MockGraphListener implements IGraphQlMapDataResolver{
         }
         return $user;
     }
+    /**
+     * get source data
+     * @return mixed 
+     */
     public function query(){
-        return[             
+
+        return $this->m_source ?? [             
             'locale'=>"en" ,
             'email'=>"t4@local.test" , 
             'lang'=>'en',

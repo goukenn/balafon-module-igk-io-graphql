@@ -4,17 +4,64 @@
 // @date: 20231009 17:41:29
 namespace igk\io\GraphQl;
 
+use IGK\Database\Mapping\Traits\ModelMappingDataTrait;
+use igk\io\GraphQl\GraphQlReadSectionInfo as GraphQlGraphQlReadSectionInfo;
+use igk\io\GraphQl\Helper\GraphQlReaderUtils;
+use igk\io\GraphQl\Traits\GraphQlReadCommentOptionsTrait;
+use igk\io\GraphQl\Types\InlineSpread;
 use IGK\Models\ModelBase;
+use IGK\System\Exceptions\ArgumentTypeNotValidException;
 use IGK\System\Models\ModelBase as ModelsModelBase;
 use IGKException;
 use IGKSysUtil as sysutil;
+use ReflectionException;
 
 ///<summary></summary>
 /**
 * information used to read brank section 
 * @package igk\io\GraphQl
 */
-class GraphQlReadSectionInfo extends GraphQlDocProperty{
+class GraphQlReadSectionInfo extends GraphQlSectionProperty{
+    use GraphQlReadCommentOptionsTrait;
+    use ModelMappingDataTrait;
+    private $m_reader;
+    private $m_pointer;
+    protected $_is_indexing;
+    private $m_sourceTypeName;
+    private $m_source_data;
+    
+    public function stopIndexing(){
+        $q = $this;
+        while($q){
+            if ($q->_is_indexing ){
+
+                $q->_is_indexing = false;
+                break;
+            }
+            $q = $q->parent;
+        }
+        $this->_is_indexing =false;
+    }
+    function __debugInfo()
+    {
+        return [];
+    }
+    /**
+     * get the source type name
+     * @return mixed 
+     */
+    public function getSourceTypeName()
+    {
+        $q = $this;
+        while($q){
+            if (!empty($q->m_sourceTypeName)){
+                return $q->m_sourceTypeName;
+            }
+            $q = $q->parent;
+        }
+        return null;
+    }
+ 
     /**
      * name of this section 
      * @var mixed
@@ -32,11 +79,7 @@ class GraphQlReadSectionInfo extends GraphQlDocProperty{
      */
     var $type;
 
-    /**
-     * store loaded properties
-     * @var array
-     */
-    var $properties = [];
+   
     /**
      * parent field section
      * @var ?static
@@ -48,13 +91,7 @@ class GraphQlReadSectionInfo extends GraphQlDocProperty{
      * @var mixed
      */
     var $data;
-
-
-    /**
-     * throw exception on reading properties
-     * @var mixed
-     */
-    var $throwException = true;
+    
     /**
      * mo
      * @param mixed $data 
@@ -63,7 +100,7 @@ class GraphQlReadSectionInfo extends GraphQlDocProperty{
      * @return mixed 
      * @throws IGKException 
      */
-    public function getValue($data, $key, ?callable $mapping){
+    public function getValue($data, $key, ?callable $mapping, $optional=false){
          
         $f_info = igk_getv($this->properties, $key);
         $v_def = $f_info ? $f_info->default: null;  
@@ -82,21 +119,34 @@ class GraphQlReadSectionInfo extends GraphQlDocProperty{
                 }
             } 
         }
-        return $this->_resolvData($data, $key, $v_def);
+        return $this->_resolvData($data, $key, $v_def, $optional);
     }
-    protected function _resolvData($data, $key, $v_def){
+    /**
+     * 
+     * @param null|string $typename 
+     * @return $this 
+     */
+    public function setSourceTypeName(?string $typename){
+        $this->m_sourceTypeName = $typename;
+        return $this;
+    }
+    protected function _resolvData($data, $key, $v_def, $optional=false){
         if (is_null($data)){
             return null;
         }
-        if($data && $this->throwException && !igk_key_exists($data, $key)){
+        if($data && !$optional && !$this->noThrowOnMissingProperty && !igk_key_exists($data, $key)){
              throw new GraphQlSyntaxException(sprintf('missing property [%s]', $key));
         }
         $v = igk_getv($data, $key, $v_def);        
         return $v; 
         
     }
+    /**
+     * get path to current section
+     * @return null|string 
+     */
     public function getFullPath(): ?string{
-        $p = [];
+        $p = []; 
         $q = $this->parent;
         while($q){
             array_unshift($p, $q->name);
@@ -105,82 +155,160 @@ class GraphQlReadSectionInfo extends GraphQlDocProperty{
         return implode('/', array_filter($p));
     }
     /**
-     * get data 
-     * @param mixed $source 
-     * @param null|callable $mapping 
-     * @return mixed 
+     * 
+     * @param mixed $source_data 
+     * @param mixed $entry_data 
+     * @return null|array 
      * @throws IGKException 
      */
-    public function getData($source, ?callable $mapping=null){ 
-        if ($source instanceof IGraphQlIndexArray)
-        {    
-            $rtab = $source->to_array();
-            return $this->_getIndexedData($rtab); 
-        }
-        if (is_array($source) && !igk_array_is_assoc($source)){
-            return $this->_getIndexedData($source, $mapping); 
-        }
-        return $this->_getFieldData($source, $mapping);
+    public function getReferencedData($source_data, $entry_data){
+        $this->m_source_data = $entry_data;
+        $cp = $this->getData($source_data); 
+        $this->m_source_data = null;
+        return $cp;
     }
-    protected function getModelMappingData(ModelBase $data, $mapping){
-        $info = $data->getTableInfo();
-        $tn = $info ? sysutil::GetModelTypeNameFromInfo($info): null; 
-        if ($mapping && $tn){ 
-            $map_data = $mapping($tn); 
-            if ($map_data){
-                $b = $data->map($map_data);
-                return $b;
-            }
-        } 
-        return $data->to_array();
+  
+    
+
+    public static function InvokeListenerMethod(GraphQlParser $reader, $def, $v_core_data=null, $mapping=null, $type_call='query'){
+        $section = $def->getChildSection(); 
+        $data = $reader->invokeListenerMethod($def->name, $def->args, $v_core_data, $section, $type_call);
+        if ($data){
+            $ndata = $section->_getData($data, $mapping);
+        } else 
+            $ndata = $def->default;  
+        return $ndata;  
     }
-    private function _getFieldData($source, ?callable $mapping=null){
+  
+
+    protected function _chainNullSourceMap($sourceMap, $default=null){
         $o = [];
-        if ($source instanceof ModelsModelBase){
-            // get mapping source 
-            $source = $this->getModelMappingData($source, $mapping); 
-        } else if ($source instanceof IGraphQlMappingData){
-            $source = $source->getMappingData($mapping);
-        }
-        foreach($this->properties as $k=>$def){
-            if ($def instanceof GraphQlSpreadIndex){
-                $o[] = null;
-                continue;
+        $q = [['n'=>& $o, 'p'=>$sourceMap]];
+        while(count($q)>0){
+            $tp = array_shift($q);
+            $n = & $tp['n'];
+            $sourceMap = $tp['p']; 
+
+            $k = array_key_first($sourceMap);
+            $tq = array_shift($sourceMap);
+
+            if ($tq instanceof GraphQlPropertyInfo){
+                if ($sourceMap){
+                   // array_unshift($q, ['n'=>& $n, 'p'=>$sourceMap]);
+                }
+                $tk = $tq->getKey();
+                $n[$tk] = $default; 
+            } else {
+                $n[$k] = $default;
             }
 
-            if ($def->child){
-                // skip child definition property and wait to complete 
-                continue;
-            }
-            $key = $def->alias ?? $def->name ?? $k;
-            $o[$key] = $this->getValue($source, $def->name, $mapping);
         }
         return $o;
+
     }
-    private function _getIndexedData(array $data, ?callable $mapping=null){
-        $tab = [];
-        $_HOOK_KEY = GraphQlHooks::HookName(GraphQlHooks::HOOK_END_ENTRY);
-        while(count($data)>0){
-            $q = array_shift($data);
-            if (!$q){
-                continue;
-            }
-            $o = $this->_getFieldData($q, $mapping);  
-            igk_hook($_HOOK_KEY, [$this, $q, & $o]);
-            $tab[] = & $o;
-            unset($o);
-            $o = null;
-        }  
-        return $tab;
+
+    public function inSubchainOf(GraphQlGraphQlReadSectionInfo $section){
+        if ($section === $this){
+            return true;
+        }
+        $q = $this;
+        while($q){
+            $q = $q->parent;
+            if ($q === $section)
+                return true;
+        }
+        return false;
     }
+  
     public function getModel(){ 
         return array_fill_keys(array_keys($this->properties), null); 
     }
+    public function __construct(GraphQlParser $reader, GraphQlPointerObject $pointer){
+        $this->m_reader = $reader;
+        $this->m_pointer = $pointer;
+    }   
+    /**
+     * 
+     * @return GraphQlPointerObject 
+     */
+    public function getRefPointer(){
+        return $this->m_pointer;
+    }
+
     /**
      * is a dependency section
      * @return bool 
      */
     public function isDependOn():bool{
         return !is_null($this->parent);
+    }
+
+      /**
+     * 
+     * @param mixed $source 
+     * @param null|callable $mapping 
+     * @return array 
+     * @throws IGKException 
+     * @throws ArgumentTypeNotValidException 
+     * @throws ReflectionException 
+     */
+    protected function _getFieldData($source, ?callable $mapping=null){
+        $o = new GraphQlReferenceArrayObject; 
+        if ($source instanceof ModelsModelBase){
+            // get mapping source 
+            $source = $this->getModelMappingData($source, $mapping); 
+        } else if ($source instanceof IGraphQlMappingData){
+            $source = $source->getMappingData($mapping);
+        }
+        $path = $this->getFullPath();
+        $v_core_data = $path && $source ? igk_conf_get($source, $path) : $source;
+        foreach($this->properties as $k=>$def){
+          
+            $data = $v_core_data;
+            if (is_numeric($k)){ 
+                $o[$k] = null;
+                // * mark field no be updated by graph listener 
+                if ($def instanceof IGraphQlUpdateProperty)  
+                    $def->UpdateRefObject($o, $data, $this->m_source_data ?? $source);
+
+                continue;
+            }
+            $key = $def->getKey() ?? $k; 
+            if (is_null($def)){
+                $o[$key] = null;
+                continue;
+            }
+
+            if ($def->isReservedProperty()){
+                $o[$key] = GraphQlReaderUtils::GetReservedValue($def); 
+                continue;
+            }
+
+
+            if ($def->type == GraphQlPropertyInfo::TYPE_FUNC){ 
+                $ndata = self::InvokeListenerMethod($this->m_reader, $def, $v_core_data);
+
+             
+                $o[$key]= $ndata;
+                unset($n_child);  
+                continue;
+            }
+            if ($def->type == GraphQlPropertyInfo::TYPE_SPEAR){ 
+                $o[$k] = new GraphQlSpreadInfo($this->m_reader, $o, $k, $def, $data);
+                continue;
+            }
+
+            $v = $this->getValue($data, $def->name, $mapping, $def->optional);
+
+            if ($def->hasChild && $v){ 
+                $section = $def->getChildSection();
+                $ndata = $section->getData($v, $mapping);
+                $o[$key] = $ndata;
+                continue;
+            }
+
+            $o[$key] = $v;
+        }
+        return $o;
     }
 }

@@ -7,7 +7,7 @@ namespace igk\io\GraphQl;
 
 ///<summary></summary>
 /**
-* 
+* store spread index in source map
 * @package igk\io\GraphQl
 */
 class GraphQlSpreadIndex{

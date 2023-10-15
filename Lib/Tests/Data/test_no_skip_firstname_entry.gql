@@ -1,0 +1,6 @@
+# @={noSkipFirstNamedQueryEntry}
+
+userList{
+    name
+    lastname
+}

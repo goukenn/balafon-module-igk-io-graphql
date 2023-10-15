@@ -1,7 +1,7 @@
 <?php
 // @author: C.A.D. BONDJE DOUE
-// @file: GraphQlDirectiveInfo.php
-// @date: 20231010 09:22:10
+// @file: GraphQlDeclaredTypePropertyInfo.php
+// @date: 20231012 17:50:16
 namespace igk\io\GraphQl;
 
 
@@ -10,8 +10,7 @@ namespace igk\io\GraphQl;
 * 
 * @package igk\io\GraphQl
 */
-class GraphQlDirectiveInfo{
+class GraphQlDeclaredTypePropertyInfo{
     var $name;
-    var $args;
-    var $args_expression;
+    var $description;
 }

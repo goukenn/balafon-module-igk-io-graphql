@@ -1,611 +1,922 @@
 <?php
-
 // @author: C.A.D. BONDJE DOUE
-// @filename: GraphQl
-// @date: 20221104 19:24:33
-// @desc: 
+// @file: GraphQlParser2.php
+// @date: 20231009 16:35:22
 namespace igk\io\GraphQl;
 
-use Exception;
-use IGK\Actions\Dispatcher; 
-use IGK\System\IO\Configuration\ConfigurationReader;
-
+use IGK\Actions\Dispatcher;
+use IGK\Helper\Activator;
+use igk\io\GraphQl\GraphQlReaderConstants as rConst;
+use igk\io\GraphQl\Helper\GraphQlReaderUtils;
+use igk\io\GraphQl\Traits\GraphQlPropertyReadingTrait;
+use igk\io\GraphQl\Traits\GraphQlReadCommentOptionsTrait;
+use igk\io\GraphQl\Types\InlineSpread;
+use igk\io\GraphQl\System\IO\GraphQlSectionReader; 
+ 
 use IGKException;
-use ReflectionException;
 use ReflectionMethod;
+use stdClass;
 
+
+// - task: return | skip query name for single query - expectation 
+
+///<summary></summary>
 /**
- * parse custom graphQL 
+ * GraphQl query parser.
  * @package igk\io\GraphQl
- * @deprecated use GraphQlParse2 insteed
  */
-class GraphQlParser
+class GraphQlParser implements IGraphQlParserOptions
 {
-    private $m_text;
-    private $m_token;
-    private $m_offset = 0;
-    private $m_readMode = self::READ_NAME;
-    private $m_listener;
-    private $m_declared_types = [];
-    private $m_declaredInputs; 
-    /**
-     * variables to pass
-     * @var mixed
-     */
-    var $variables;
-
-    /**
-     * @var igk\io\GraphQl\mapData
-     */
-    var $mapData;
-
-
-
-    const READ_NAME = 0;
-    const READ_READ_TYPE = 1;
-    const READ_READ_DEFAULT = 2;
-    const READ_ARGUMENT = 3;
-    const READ_END_ARGUMENT = 4;
-    const READ_DEFINITION = 5;
-
-    const T_GRAPH_START = 1;
-    const T_GRAPH_END = 2;
-    const T_GRAPH_NAME = 3;
-    const T_GRAPH_TYPE = 4;
-    const T_GRAPH_DEFAULT = 5;
-    const T_GRAPH_ARGUMENT = 6;
-    const T_GRAPH_COMMENT = 7;
-    const T_GRAPH_INTROSPECTION = 8;
     const T_GRAPH_DECLARE_TYPE = 9;
     const T_GRAPH_DECLARE_INPUT = 10;
-    const T_GRAPH_TYPE_DEFINITION = 11;
-    const T_GRAPH_MULTI_STRING = 12;
-    const T_GRAPH_STRING = 13;
-    const T_GRAPH_SPREAD_OPERATOR = 14;
-    const LITTERAL_TOKEN = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_';
-    const RESERVED_WORD = 'true|false|null|schema|query|type|enum|mutation';
-    const SPEAR_OPERATOR = '...';
 
-
-    const T_TYPE_QUERY_FUNC = 'query_func';
-
-    const HOOK_LOADING_COMPLETE = __CLASS__.':hook_loading_complete';
+    use GraphQlPropertyReadingTrait;
+    use GraphQlReadCommentOptionsTrait;
 
     /**
-     * retrieve declared inputs
-     * @return mixed 
+     * last loaded definition
+     * @var mixed
      */
-    public function getDeclaredInputs()
+    private $m_definition;
+    
+    public function setListener(?IGraphQlInspector $listener){
+        $this->m_listener = $listener;
+        return $this;
+    }
+    /**
+     * query string to read
+     * @var mixed
+     */
+    private $m_query;
+    /**
+     * query variable to handle
+     * @var mixed
+     */
+    private $m_variables;
+
+    /**
+     * the reading token
+     * @var mixed
+     */
+    private $m_token;
+
+    private $m_mapData;
+
+    /**
+     * offset of reading
+     * @var int
+     */
+    private $m_offset = 0;
+
+    /**
+     * object use for listener value
+     * @var IGraphQl
+     */
+    private $m_listener;
+
+    /**
+     * source data
+     * @var mixed
+     */
+    private $m_data;
+
+    /**
+     * store length of the query
+     * @var mixed
+     */
+    private $m_length;
+
+    /**
+     * store declared input information 
+     * @var array
+     */
+    private $m_declaredInput = [];
+
+    /**
+     * store load input
+     * @var mixed
+     */
+    protected $p_loadInput; 
+
+    /**
+     * get declared input 
+     * @return ?array
+     */
+    public function getDeclaredInputs(): ?array
     {
-        return $this->m_declaredInputs;
+        return $this->m_declaredInput;
     }
     /**
-     * get the read token
-     * @return mixed 
+     * store declred input type
+     * @param string $type 
+     * @return void 
      */
-    public function getToken(){
-        return $this->m_token;
+    protected function storeDeclaredInput(string $type){
+        if ($this->p_loadInput){
+            $this->m_declaredInput[$type][] = $this->p_loadInput;
+        }
     }
     /**
-     * get declared fragment
+     * get fragments
+     * @return mixed 
+     * @throws IGKException 
+     */
+    public function getFragments()
+    {
+        return igk_getv($this->getDeclaredInputs(), 'fragment');
+    }
+
+    protected function __construct()
+    {
+    }
+    /**
+     * helper parse with options
+     * @param array $options 
+     * @param mixed $query_or_query_data 
+     * @param mixed $data_or_listener 
+     * @param mixed $reader 
+     * @param null|igk\io\GraphQl\GraphqlMapData $mapData 
+     * @return void 
+     */
+    public static function ParseWithOption(array $options, $query_or_query_data, $data_or_listener = null, &$reader = null, ?GraphqlMapData $mapData = null)
+    {
+        return static::Parse($query_or_query_data, $data_or_listener, $reader, $mapData, $options);
+    }
+    /**
+     * get token info 
      * @return array 
      */
-    public function getFragments(){
-        return igk_getv($this->m_declaredInputs, 'fragment'); 
+    public function tokenInfo(): array
+    {
+        $id = $v = $e = $this->token();
+        if (is_array($e)) {
+            $id = $e[0];
+            $v = $e[1];
+        }
+        return [$id, $v, $e];
+    }
+    public function getDefinition(){
+        return $this->m_definition;
     }
     /**
-     * create parsing info object 
-     * @return object 
+     * parse query and 
+     * @param string|array $query in case of array. if array ['query'=>..., 'variables'=>...];
+     * @param null|array|IGraphQlInspector $data_or_listener 
+     * @param mixed $reader reader for debugging 
+     * @return mixed|definition or null entry data return data 
      */
-    private function _create_info()
+    public static function Parse($query_or_query_data, $data_or_listener = null, &$reader = null, 
+    ?GraphqlMapData $mapData = null, ?array $initiator = null)
     {
-        return (object)[
-            "name" => null, //  <- name of the object 
-            "type" => null, //  <- type of the object null|query|mutation|func_type
-            "default" => null,
-            "description" => null,
-            "parent" => null,
-            "alias" => null
-        ];
+        $query = $query_or_query_data;
+        $variable = null;
+        if (is_array($query)) {
+            $tquery = $query;
+            $variable = igk_getv($query, 'variables');
+            $query = igk_getv($query, 'query') ?? igk_die('missing query');
+            unset($tquery['variables']);
+            unset($tquery['query']);
+            if (!$initiator && (count($tquery) > 0)) {
+                $initiator = $tquery;
+            }
+        }
+
+        $reader =  new static;
+        $reader->m_query = $query;
+        $reader->m_variables = $variable;
+        $reader->m_data = is_array($data_or_listener) ? GraphQlData::Create($data_or_listener) : new GraphQlData();
+        $reader->m_listener = $data_or_listener instanceof IGraphQlInspector ? $data_or_listener : null;
+        $reader->m_length = strlen($query);
+        $reader->m_mapData = $mapData;
+
+        if ($initiator) {
+            Activator::BindProperties($reader, $initiator);
+        }
+        $o = $reader->_load();
+        $reader->m_definition = $o;
+        if ( $data_or_listener ){
+            // passing data to chain list 
+            return $reader->exec();
+        }
+       
+
+        return $reader->viewDefault(); // GraphQlReaderUtils::InitDefaultProperties($o, null);
+
+        // return $o;
     }
-    /**
-     * parse graph query string and load data 
-     * @param string|array $graph graph data
-     * @return false|object
-     */
-    public static function Parse($graph, $data = null, $listener = null, &$parser = null)
-    {
-        $o = null;
-        $parser = new static;
-        $parser->m_listener = $listener;
-        $query = $graph;
-        $variables = [];
-        if (is_array($graph) || is_object($graph)) {
-            $query = igk_getv($graph, 'query');
-            $variables = igk_getv($graph, 'variables');
+    public function viewDefault($default=null){
+        $o = $this->m_definition;
+        $p = GraphQlReaderUtils::InitDefaultProperties($o, $default);
+        $tqueries = igk_getv($this->getDeclaredInputs(), 'query'); 
+        if (count($tqueries)==1){
+            if (!empty($tqueries[0]->name)){
+                return [$tqueries[0]->name=>$p];
+            }
         }
-        $parser->variables = $variables;
-        try {
-            $parser->_load($query, $data, $o);
-            return (object)$o;
+        return $p;
+    }
+    public function exec($mapping=null){
+        $queries = igk_getv($this->getDeclaredInputs(), 'query');
+        $mutation = igk_getv($this->getDeclaredInputs(), 'mutation');
+        $ts = [];
+        $v_model_mapping = $mapping ?? $this->_get_model_callback();
+        $sourceType = $this->m_listener ? $this->m_listener->getSourceTypeName() : null;
+        $noskip_entrie_ = 
+        $this->noSkipFirstNamedQueryEntry;
+
+        if ($queries){
+            $root = true;
+            $tms = $this->_get_root_data();
+            while($queries){
+                $q = array_shift($queries);
+                $ms = $tms;
+                $section = $q->getSection();
+                $section->setSourceTypeName($sourceType);
+                if (empty($queries) && $root){ 
+                    $ns = $q->name;
+                    $ms = $section->getData($ms, $v_model_mapping);
+                    if (empty($ns)){
+                        $ns='Query'; 
+                        if (is_array($ms) && (count($ms)==1)){
+                            if (!is_numeric($tns = array_key_first($ms))){
+                                $ns = $tns;
+                                $ms =  $ms[$ns]; // array_shift($ms); 
+                            } 
+                        }
+                        // convert to definition 
+                        // if (is_array($ms)&& igk_array_is_assoc($ms)){
+                        //     $ms = (object)$ms;
+                        // }
+                    }  
+                } else { 
+                    $ns = $q->name;
+                    if (empty($ns)){
+                        $ns='Query'; 
+                    } else {
+                        $ms = igk_getv($ms, $ns, $tms);
+                    }
+                    $ms = $section->getData($ms, $v_model_mapping);
+                }
+                if (in_array($ns, ['Mutation'])){
+                    throw new GraphQlSyntaxException('definition failed');
+                }
+                $ts[$ns] = is_array($ms) && empty($ms) ? null : $ms;
+                $root =false;
+            }
         }
-        catch(ReflectionException $ex){
-            throw new GraphQlSyntaxException('missing method', 501, $ex);
-            
-        } catch (Exception $ex) {
-            throw new GraphQlSyntaxException($ex->getMessage(), 500, $ex);
         
+        
+        if ($mutation){
+            // invoke mutations
+            $exclude_name = ['Query'];
+            $var = $this->m_variables;
+            while (count($mutation)>0){
+                // store mutation result
+                $q = array_shift($mutation);
+                $ns = $q->name ?? 'Mutation';
+                $ms = null;
+                in_array($ns, $exclude_name) && igk_die_exception(GraphQlSyntaxException::class, 'invalid mutation name. '.$ns);
+                if (!$q->definition){
+                    igk_die("missing definition");
+                }
+                // if ($q->argument){
+                //     // by pass argument if not provided from root variables
+                 
+                // }  else 
+                // {
+                //     $this->m_variables = $var;
+                // }
+                $bs = [];
+                foreach($q->definition as $k=>$v){
+                    $v_key = $v->getKey() ?? $k;
+                    $ms = null;
+                    if ($v->type == GraphQlPropertyInfo::TYPE_FUNC)
+                    {
+                        $ms = GraphQlReaderUtils::InvokeListenerMethod($this, $v,null, $mapping, 'mutation');
+                    }
+                    if ($ms){ 
+                        $bs[$v_key] = $ms;
+                    }
+                }
+                
+                if (($ns=='Mutation') || $q->argument){
+                    if (count($bs) == 1){
+                        if (!is_numeric($nk = array_key_first($bs))){
+                            $ns = $nk;
+                            $bs = $bs[$nk];
+                        }
+                    }
+                }
+                
+                $ts[$ns] = $bs;
+            }
+            $this->m_variables =  $var;
         }
-        return false;
+
+        // use in order for fragment to load property data 
+        igk_hook(
+            GraphQlHooks::HookName(GraphQlHooks::HOOK_LOAD_COMPLETE),
+            [$this]
+        );  
+        return $ts;
     }
+    /**
+     * load and parse data 
+     * @return null|array|object 
+     */
+    protected function _load()
+    {
+        // 20231014 - new load implementation
+        $v_root = null;
+        $v_o = null;
+        $v_brank = 0;
+        $v_alias = null;
+        $v_root_count = 0;
+        $v_list = null;
+        $v_desc = null;
+        $v_flag_named_query = false;
+        $v_def_name = false;
+        $v_last_entry_name = null;
+
+        // read field fload 
+        while ($this->read()) {
+            list($id, $v) = $this->tokenInfo();
+            switch ($id) {
+                case GraphQlReaderConstants::T_READ_COMMENT:
+                    $this->_bind_comment($v);
+                    break;
+                case GraphQlReaderConstants::T_READ_DESCRIPTION:
+                    $v_desc = $v;
+                    break;
+                case GraphQlReaderConstants::T_READ_ALIAS:
+                    if (!empty($v_alias)) {
+                        throw new GraphQlSyntaxException("expected name got alias");
+                    }
+                    $v_alias = $v;
+                    break;
+                case GraphQlReaderConstants::T_READ_FUNC_ARGS:
+                    if ($this->p_loadInput) {
+                        $this->p_loadInput->parameters = $v;
+                    }
+                    break;
+                case GraphQlReaderConstants::T_READ_NAME:
+                    // attach property to section 
+                    if ($v_brank == 0) {
+                        //binding query desc 
+                        $v_last_entry_name = null;
+                        if ($v_def_name) {
+                            if (($this->p_loadInput->type =='query') && (strtolower($v) == 'query')){
+                                $v =  null;
+                            }
+                            $this->p_loadInput->name = $v;
+                            $v_def_name = false;
+                        } else {
+                            // top brank reading definition property 
+                            $this->_bind_delcaredInput($v, $v_def_name, $v_desc);
+                            if (!$v_def_name) {
+                                $v_last_entry_name = $v;
+                            }
+                        }
+                    }
+                    $v_alias = null;
+                    break;
+                case GraphQlReaderConstants::T_READ_START:
+                    if (isset($v_o)) {
+                        unset($v_o);
+                    }
+                    $sector = new GraphQlSectionReader($this, $v_desc);
+                    $sector->copyState($this);
+              
+                
+                    if (($v_o = $sector->read()) !== false) {
+                        $v_tabquery = igk_getv($this->getDeclaredInputs(), 'query');
+                        $v_tquery = null;
+
+                       
+                        if (is_null($this->p_loadInput)) { 
+                            $v_tabquery && $v_tquery = igk_array_find_first($v_tabquery, function($a){
+                                if (empty($a->name)) {
+                                    return $a;
+                                }
+                            });
+                            if (!$v_tquery){ 
+                                $this->p_loadInput = GraphQlDeclaredInputFactory::Create('query');
+                                $this->storeDeclaredInput('query');
+                                if ($v_last_entry_name != 'Query'){
+                                    $this->p_loadInput->name = $v_last_entry_name;
+                                }
+                               
+                            }
+                        } else {
+                            $v_tabquery && $v_tquery = igk_array_find_first($v_tabquery, function($a){
+                                if ($a->name ==  $this->p_loadInput->name) {
+                                    return $a;
+                                }
+                            });
+                            if ($v_tquery && empty($v_tquery->definition)){
+                                // reset query to avoid 
+                                $v_tquery = null;
+                            }
+                        }
+                        if ($v_tquery){
+                            // + | --------------------------------------------------------------------
+                            // + | MERGE ROOT PROPERTIEs
+                            // + |
+                            
+                            // + | MERGE PROPERTIES - 
+                            // -----------------------------------------------------------
+                            $index = $this->p_loadInput ? 
+                                array_search($this->p_loadInput, $v_tabquery) : false;
+                            if ($index !== false){
+                                unset($v_tabquery[$index]);
+                                $this->m_declaredInput['query'] = $v_tabquery;
+                            }
+
+                            $this->p_loadInput = $v_tquery;
+                            $v_n = array_key_first($v_tquery->definition);
+                            $m = $v_tquery->definition[$v_n]->section;
+                            foreach($v_o as $k){
+                                $k->section = $m;
+                                $m->properties[$k->getKey()] = $k;
+                            }
+                            $v_o = array_merge($v_tquery->definition, $v_o);
+                        }
+                        $this->p_loadInput->definition = &$v_o;
+                        if ($v_root && !$v_tquery) {
+                            if (is_null($v_list)) {
+                                $v_list = [$v_root];
+                            }
+                            $v_list[] = &$v_o;
+                        }
+                        $v_root = &$v_o;
+                        $this->p_loadInput = null;
+                    } else {
+                        return false;
+                    }
+                    $v_root_count++;
+                    $v_last_entry_name  =null;
+                    break;
+            }
+        }
+      
+        if ($v_list) {
+            if (!$this->noSkipFirstNamedQueryEntry && $v_flag_named_query && (count($v_list) == 1)) {
+                // + | skip query name for single properties
+                $v_first_key = array_key_first($v_list);
+                return (object)$v_list[$v_first_key];
+            }
+            return $v_list;
+        }
+        return $v_root;
+
+        // /**
+        //  * @var ?GraphQlReadSectionInfo $v_section_info 
+        //  */
+        // $o = null;
+        // $v_root= null;
+        // $v_brank = 0;
+        // /**
+        //  * @var ?GraphQlReadSectionInfo $v_section_info 
+        //  */
+        // $v_section_info = null;     // <- section reading info
+        // $v_desc = null;             // <- preload reading description 
+        // $v_property_name = null;    // <- store the current property name to load
+        // $v_property_alias = null; // <- store property alias
+        // $p = []; // container 
+        // $v_chain_args = new GraphQlChainGraph;
+        // $v_chainstart = false;
+        // $v_property_info = null;  // <- store property info
+        // $data = $this->_get_root_data(); // <- init root data
+        // $v_list = null;
+        // $v_fc_clear = function () use (&$v_property_info, &$v_property_name, &$v_property_alias) {
+        //     $v_property_info = null;
+        //     $v_property_name = null;
+        //     $v_property_alias = null;
+        // };
+        // $v_model_mapping = $this->_get_model_callback();
+        // $v_out_data = null;
+        // $v_def_name = false;
+        // $v_current_data_def = null;
+        // $v_key =
+        //     $v_p = null;
+
+        // $v_data_is_indexed = GraphQlData::IsIndexed($data);
+        // $v_load_indexed = false;
+        // $v_index_list = false;
+        // $v_flag_named_query = false;
+        // $options_defs = null;
+        // $v_last_entry_name = null;  // <- get entry name
+ 
+        // $v_root_counter = 0; // <!-- counter maximun 
+
+        // $loup_ = null;
+
+        // while ($this->read()) {
+        //     $id = $v = $e = $this->token();
+        //     if (is_array($e)) {
+        //         $id = $e[0];
+        //         $v = $e[1];
+        //     }
+        //     $this->_update_chain_args($v_chain_args, $id, $v, $v_chainstart);
+ 
+        //     switch ($id) {
+        //         case rConst::T_READ_FUNC_ARGS:
+        //             if ($v_property_info) {
+        //                 // replace with callback function if section is depending on 
+        //                 // depend on global variable or depending on context view - require a listener to handle function 
+        //                 if ($this->m_listener) {
+        //                     $args = $v;
+
+        //                     $v_property_info->type = GraphQlPropertyInfo::TYPE_FUNC;
+        //                     $v_property_info->args = $args;
+        //                     $v_key = $v_property_info->getKey();
+                            
+        //                     $o[$v_key] = $v_property_info; // new GraphQlReferenceSectionProperty($this, $o, $v_key, $v_section_info, $v_property_info);
+                            
+        //                 }
+        //             }
+        //             break;
+        //         case rConst::T_READ_COMMENT:
+        //             $this->_bind_comment($v); 
+        //             break;
+        //         case rConst::T_READ_DEFAULT_VALUE:
+        //             if ($v_property_info){
+        //                 if ($v_property_info->type !=  GraphQlPropertyInfo::TYPE_FUNC){
+        //                     $v_property_info->default = $v;
+        //                     $v_property_info->optional = true;
+        //                 } else {
+        //                     throw new GraphQlException('invalid syntax');
+        //                 }
+        //             } else {
+        //                 throw new GraphQlException('missing property to set default');
+        //             }
+        //             break;
+        //         case rConst::T_READ_DESCRIPTION:
+        //             $v_desc = $v;
+        //             break;
+        //         case rConst::T_READ_DIRECTIVE:
+        //             if ($v_property_info) {
+        //                 $v_property_info->directives[] = $v;
+        //             } else if ($v_section_info) {
+        //                 $v_section_info->directives[] = $v;
+        //             } else {
+        //                 throw new GraphQlSyntaxException('directive not allowed');
+        //             }
+        //             break;
+        //         case rConst::T_READ_SPEAR:
+        //             $name = $e[2];
+        //             // + | new property and name  
+        //             $this->_update_last_property($o, $v_property_info, $data);
+        //             // $v_property_info && ($o[$v_property_info->getKey()] = '---c');
+        //             $v_property_info = $this->_add_new_property($name, $v_desc, $v_property_alias, $v_section_info);
+        //             $v_property_info->type = GraphQlPropertyInfo::TYPE_SPEAR;
+        //             $sp = new GraphQlSpreadInfo($this, $o, $name, $v_property_info);
+        //             // + | remove section from object data
+        //             unset($v_section_info->properties[$name]); 
+        //             $o[] = $sp;
+        //             $v_sp = array_key_last($o);
+        //             $sp->key = $v_sp;
+        //             $v_property_name = null; 
+        //             $v_section_info->properties[$name] = new GraphQlSpreadIndex($v_sp, $v_property_info);
+        //             $v_fc_clear();
+        //             break;
+        //         case rConst::T_READ_INLINE_SPEAR:
+        //             $v_property_info && $this->_update_last_property($o, $v_property_info, $data);
+        //             $this->_bind_inline_spear($v_section_info, $v_desc, $o); 
+        //             $v_desc = null;
+        //             $v_property_info = null;
+        //             break;
+        //         case rConst::T_READ_NAME:
+        //             if ($v_brank == 0) {
+        //                 $v_last_entry_name = null;
+        //                 if ($v_def_name) {
+        //                     $this->p_loadInput->name = $v;
+        //                     $v_def_name = false;
+        //                 } else {
+        //                     // top brank reading definition property 
+        //                     $this->_bind_delcaredInput($v, $v_def_name, $v_desc);
+        //                     if (!$v_def_name) {
+        //                         $v_last_entry_name = $v;
+        //                     }
+        //                 }
+        //             } else {
+        //                 if (!$v_section_info) {
+        //                     throw new GraphQlSyntaxException('read name but no section found');
+        //                 }
+
+        //                 $this->_update_last_property($o, $v_property_info, $data);
+        //                 $v_property_info = $this->_add_new_property($v, $v_desc, $v_property_alias, $v_section_info);
+        //                 $v_property_alias = null;
+        //                 $v_desc = null;
+        //                 $v_property_name = $v;
+        //             }
+        //             break;
+        //         case rConst::T_READ_ALIAS:
+        //             // read field alias
+        //             if (!empty($v_property_alias)) {
+        //                 throw new GraphQlSyntaxException('already set alias');
+        //             }
+        //             $v_property_alias = $v;
+        //             break;
+        //         case rConst::T_READ_START:
+        //             $v_bind_section = false;
+        //             if ($v_brank == 0) {
+        //                 $v_root_counter ++;
+                        
+        //                 if (!is_null($o)) {
+        //                     if (is_null($v_list)) {
+        //                         $v_list = [];
+        //                         $v_list[] = $o;
+        //                         unset($o);
+        //                         $o = null;
+        //                     }
+        //                     $o = [];
+        //                     $v_list[] = $o;
+        //                     $o = &$v_list[array_key_last($v_list)];
+        //                 } else {
+        //                     // + | start object creation
+        //                     $o = [];
+        //                     $v_root = & $o;
+        //                 }
+        //                 $v_current_data_def = new GraphQlPointerObject($o);
+        //             } else {
+        //                 // + | sub properties
+        //                 $v_key = $v_property_info->getKey();
+        //                 $this->_init_child_property($o, $v_key, $v_property_info, $data);
+        //                 // $v_section_info->name = $v_property_name;
+        //                 // $v_section_info->alias = $v_property_alias; 
+        //                 $v_section_info = $this->_chain_info($v_section_info);
+                        
+        //                 $v_ref = new GraphQlReferenceSectionProperty($this, $o, $v_key, $v_section_info, $v_property_info);
+        //                 $v_new_o = [];
+        //                 $v_current_data_def = new GraphQlPointerObject($v_new_o, $v_current_data_def);
+        //                 $o[$v_key] = $v_current_data_def;
+        //                 unset($o);
+        //                 $o = null;
+        //                 $o = &$v_new_o;
+        //                 $v_bind_section = true;
+        //                 if ($v_property_info->type == GraphQlPropertyInfo::TYPE_FUNC) {
+        //                     $v_section_info->type = $v_property_info->type;
+        //                 }
+        //             }
+        //             $v_brank++;
+        //             // start 
+        //             if (!$v_bind_section) {
+        //                 $v_section_info = $this->_chain_info($v_section_info);
+        //             }
+        //             $v_fc_clear();
+        //             break;
+
+        //         // + | --------------------------------------------------------------------
+        //         // + | DO END READ 
+        //         // + |
+                    
+        //         case rConst::T_READ_END:
+        //             if (!$v_section_info) {
+        //                 throw new GraphQlSyntaxException("missing section");
+        //             }
+        //             if (empty($v_section_info->properties)) {
+        //                 throw new GraphQlSyntaxException("missing property in section");
+        //             }
+        //             $this->_update_last_property($o, $v_property_info, $data);
+
+        //            //  igk_debug_wln('end after _render ');
+
+
+        //             if ($v_section_info->type == GraphQlPropertyInfo::TYPE_FUNC) {
+        //                 // invoke function and 
+        //                 igk_hook(GraphQlHooks::HookName(GraphQlHooks::HOOK_SECTION_FUNC), [$this, $v_section_info, $data]);
+        //             }
+        //             // else {
+        //             //     if (($v_data_is_indexed) && empty($o)) {
+        //             //         $tb = $data->entry;
+        //             //         $o = $v_section_info->getData($tb, $v_model_mapping);
+        //             //         $v_load_indexed = true;
+        //             //     }
+        //             // }
+
+        //             // + | update indexed array
+        //             // if ($data instanceof GraphQlData) {
+        //             //     if (!$data->isIndex()) {
+
+        //             //         igk_hook(
+        //             //             GraphQlHooks::HookName(GraphQlHooks::HOOK_END_ENTRY),
+        //             //             [$v_section_info, $data->first(), &$o]
+        //             //         );
+        //             //     }
+        //             // }
+        //             // + | send signal to close current section 
+        //             $this->_endLoading($v_section_info, $data, $o);
+
+        //             $v_brank--;
+        //             if ($v_brank == 0) {
+        //                 // + | send signal to end a section query
+        //                 $v_free_o =false;
+        //                 if ($this->p_loadInput) {
+        //                     if (is_null($v_list)) {
+        //                         $v_list = [$this->p_loadInput->name => & $o];
+        //                     } else {
+        //                         $v_list[$this->p_loadInput->name] = & $o;
+        //                     }
+        //                     $v_flag_named_query = true;
+        //                     // + | update input query definition
+        //                     foreach($v_section_info->properties as $k=>$v){
+        //                         $this->p_loadInput->definition[$k] = ['name'=>$k];
+        //                     }
+        //                     $v_free_o  = true; 
+        //                 } else if ($v_load_indexed && is_array($o)) {
+        //                     if (!$v_index_list) {
+        //                         $v_list = $o;
+        //                         $v_index_list = true;
+        //                     } else {
+        //                         $v_list[] = $o;
+        //                     }
+        //                 }
+
+        //                 $this->_endQuerySection($v_section_info, $v_data_is_indexed, $data, $o, $v_model_mapping); 
+                        
+        //                 if ($v_free_o){ 
+        //                     unset($o);
+        //                     $o = null;
+        //                 }
+        //                 // + | <- invoke end query 
+        //                 igk_hook(GraphQlHooks::HookName(GraphQlHooks::HOOK_END_QUERY), [$this, $data]);
+        //                 $v_section_info = null;
+
+        //             } else {
+        //                 if ($v_section_info instanceof GraphQlReadSectionInfo) {
+        //                     $v_section_info = $v_section_info->parent;
+        //                 }
+        //             }
+        //             if ($v_p = $v_current_data_def->getParentRef()) {
+        //                 $o = &$v_p->getRefData();
+        //                 $v_current_data_def = $v_p;
+        //             } 
+        //             $v_fc_clear();
+        //             break;
+        //     }
+        // }
+        // if ($o || $v_list) {
+        //     igk_hook(Path::Combine(GraphQlHooks::class, GraphQlHooks::HOOK_LOAD_COMPLETE), [$this, $data]);
+        // }
+        // // | <- list of object 
+        // if (!is_null($v_list)) {
+        //     unset($o);
+        //     if (!$this->noSkipFirstNamedQueryEntry && $v_flag_named_query && (count($v_list) == 1)) {
+        //         // + | skip query name for single properties
+        //         $v_first_key = array_key_first($v_list);
+        //         return (object)$v_list[$v_first_key];
+        //     }
+        //     return $v_list;
+        // }
+        // if (!empty($v_last_entry_name)) {
+        //     if ($this->noSkipFirstNamedQueryEntry) {
+        //         return [$v_last_entry_name => $o];
+        //     }
+        // }
+        // if (($v_data_is_indexed)&&  ($v_root_counter==1) && is_array($o)){
+        //     return $o;
+        // }
+        // return (object)$o;
+    }
+
+    /**
+     * raise end query section 
+     * @param GraphQlReadSectionInfo $section 
+     * @param bool $v_data_is_indexed 
+     * @param mixed $data 
+     * @param mixed $o 
+     * @param mixed $mapping 
+     * @return void 
+     * @throws IGKException 
+     */
+    protected function _endQuerySection(GraphQlReadSectionInfo $section, bool $v_data_is_indexed, $data, & $o, $mapping){
+        if ($data instanceof GraphQlData){
+            $data = $data->entry;
+        }
+        if ($v_data_is_indexed){
+            // + | source data is indexed 
+            $tout = [];
+            $tout = $section->getData($data, $mapping, $o); 
+            $o = $tout; 
+        } else {
+            // + | for non indexed data 
+            if ($data){
+
+                $tout = $section->getData($data, $mapping, $o);
+                $o = $tout;   
+            }
+            else {
+                $tout = $section->getData(null, $mapping, $o);
+                $o = $tout;   
+            }
+        }
+    }
+    protected function _bind_inline_spear(GraphQlReadSectionInfo $section_info, ?string $description, &$refObject){
+        $v_inf = new InlineSpread($this, $section_info, $refObject);
+        $v_inf->description = $description;
+        $v_inf->readDefinition($this);
+    }
+    protected function _bind_comment(string $v)
+    {
+        GraphQlReaderUtils::BindComment($this, $v);
+       
+    }
+    protected function _add_new_property(string $name, ?string $desc, ?string $alias, GraphQlReadSectionInfo $section)
+    {
+        $v_property_info = new GraphQlPropertyInfo($name);
+        $v_property_info->alias = $alias;
+        $v_property_info->section = $section;
+        $v_property_info->description = $desc;
+        $section->properties[$name] = $v_property_info;
+        return $v_property_info;
+    }
+
+    /**
+     * init child property 
+     * @param mixed $o 
+     * @param string $v_key 
+     * @param GraphQlPropertyInfo $v_property_info 
+     * @param mixed $data 
+     * @return void 
+     */
+    protected function _init_child_property(&$o, string $v_key, GraphQlPropertyInfo $v_property_info, $data)
+    {
+        $v_property_info->hasChild = true;
+        $o[$v_key] = null;
+    }
+
+    /**
+     * update field property 
+     * @param mixed $o 
+     * @param GraphQlPropertyInfo $v_property_info 
+     * @param mixed $data 
+     * @return void 
+     * @throws IGKException 
+     */
+    protected function _update_single_property(&$o, GraphQlPropertyInfo $v_property_info, $data)
+    {
+
+        if ($v_property_info->hasChild) {
+            return;
+        }
+        if ($data instanceof GraphQlData) {
+            if (!$data->isIndex()) {
+                $data = $data->first();
+            }
+        }
+
+        if (!$this->noThrowOnMissingProperty && !igk_key_exists($data, $v_property_info->name)) {
+            throw new GraphQlSyntaxException(sprintf('missing property [%s]', $v_property_info->name));
+        }
+        $v_key = $v_property_info->getKey();
+        $o[$v_key] = $this->_get_property_value($data, $v_property_info);
+    }
+    protected function _update_last_property(&$o, ?GraphQlPropertyInfo $v_property_info, $data=null)
+    {
+        $this->_updateLastProperty($o, $v_property_info, $data);
+       
+    }
+    protected function _get_property_value($data, $v_property_info)
+    {
+        return igk_getv($data, $v_property_info->name);
+    }
+
     protected function _get_model_callback()
     {
         return function ($tn) {
             return $this->getMapData($tn);
         };
     }
-    protected function _update_chain_args(GraphQlChainGraph $chain_args, $id, $v, & $chain_start){
-        // igk_wln("id: ".$id." : ".$v);
-        $chain_args->update($id, $v, $chain_start);     
-    }
     /**
-     * load data 
-     * @param string $graph graph query
-     * @param mixed $data initial data
-     * @param mixed referenced output
-     * @Exception can raise exception
-     */
-    protected function _load(string $graph, $data = null, &$o = null)
-    {
-        $parser = $this;
-        $parser->m_text = $graph;
-        $q = [];  // 
-        $p = [];  // container
-        // initialize info
-        $f_info = $parser->_create_info();
-        // - init data - to store initialized data 
-        $v_init_data = $data;
-        $data = $data ? GraphQlData::Create($data): new GraphQLData;
-        $v_init_graph_obj = !is_null($v_init_data); // <- mark to initiliaze the first object 
-
-        $v_start = false;
-        $v_ldinput = null;
-        $v_declaredInputs = & $this->m_declaredInputs;
-        $v_declaredTypes = & $this->m_declared_types;
-        $v_def_name = false;
-        $v_description = null;
-        $v_alias = null;
-        $v_outlist = null;
-        $v_injector = Dispatcher::GetInjectTypeInstance(GraphQlQueryOptions::class,null);
-        // + | to store property in chain list 
-        $v_chain_args = new GraphQlChainGraph;
-        $v_chainstart = false;
-
-        $v_model_callback = $this->_get_model_callback();
-        while ($parser->read()) {
-            $v = $e = $parser->token();
-            $id = null;
-            if (is_array($e)) {
-                $id = $e[0];
-                $v = $e[1];
-            }
-            switch ($v) {
-                case ':': // explicit separator
-                case ' ': // separator 
-                    // define alias
-                    if ($f_info) {
-                        // possibility of read alias
-                        $v_alias = true;
-                        // $parser->m_readMode = self::READ_NAME;
-                        continue 2;
-                    }
-                    break;
-            }
-            $this->_update_chain_args($v_chain_args, $id, $v, $v_chainstart);
-            switch ($id) {
-                    // handle query expression      
-                case self::T_GRAPH_MULTI_STRING:
-                    $v_description = trim($v, '" ');
-                    break;
-                case self::T_GRAPH_STRING:
-                    /* out of context else string declaration - constant var=""*/
-                    $v_description = trim($v, '" ');
-                    break;
-                case self::T_GRAPH_SPREAD_OPERATOR:
-                    $this->_load_spread_info($f_info, $e, $o, $p, $q, $data, $v_description);
-
-                    break;
-                case self::T_GRAPH_START:
-                    $v_def_name = false;
-                    if (is_null($o)) {
-                        // first object
-                        $o = [];
-                        $v_start = 1;
-                    } else {
-                        igk_debug_wln("add - parent ");
-                        if (!empty($f_info->name)) {
-                            $n = trim($f_info->name);
-                            $o[$n] = [];
-                            $q[] = &$o;
-                            $o = &$o[$n];
-                            $f_info = $parser->_create_info();
-                        } else {
-                            throw new GraphQlSyntaxException("graph start - no info_name defined no name defined - " . json_encode($o));
-                        }
-                        $v_start++;
-                    }
-                    break;
-                case self::T_GRAPH_END:
-                    // + | for every } command check that the data is already provided - 
-                    if ($this->_end_graph_end($data)){
-                        $v_init_graph_obj = true;
-                    }
-
-                    if ($v_init_graph_obj){
-                        $this->_update_value($o, $data);
-                        $v_init_graph_obj = false;
-                    }
-
-                    if (!empty($n = $f_info->name)) {
-                        $this->_update_mark($o, $f_info, $data, $v_chain_args->path());
-                    }
-                    
-                    if (($data instanceof GraphQlData) && $this->m_listener && !$v_ldinput && !$v_init_data) {
-                        // load entry fields with listener - no data to init
-                        $tfilter = (array)$o;
-                        // check that named property as set
-                        $set = false;
-                        foreach($tfilter as $k=>$v){
-                            if (!is_numeric($k)){
-                                if ($v!==null){
-                                    $set = true;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (!$set){ 
-                            $t_entry = $this->m_listener->query();
-                            $data->storeEntry($t_entry);
-                            if ($t_entry  && !$data->isIndex()) {
-                                $v_data = $this->getData($q, $t_entry);
-                                // update query entries 
-                                foreach (array_keys($o) as $k) {
-                                    if (is_numeric($k)){
-                                        $v_tobj = $o[$k]; 
-                                        $v_tobj->updateFields($this, $k, $o, $data, $v_data, $this->_get_model_callback());
-                                    } else {
-                                        $o[$k] = $data->getValue($k,
-                                        $v_data,
-                                        //  $t_entry,
-                                         $this->_get_model_callback());      
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    $data->updateObjectField($o, $v_chain_args->path(), $v_model_callback); 
-
-                    if (($c = count($q)) > 0) {
-                        $o = &$q[$c - 1];
-                        array_pop($q);
-                    }
-
-                    if (count($p) > 0) {
-                        $data = array_pop($p);
-                    }
-                    $v_start--;
-                    if ($v_start === 0) {
-                        $v_start = false;
-                    }
-                    if ($v_ldinput != null) {
-                        $v_ldinput->definition = $data->getInfo();
-                        // update root query request 
-                        if (!$v_start && ($v_ldinput->type == 'query')) {
-                            if (!$v_outlist)
-                                $v_outlist = [];
-                            if (!empty($v_ldinput->name)) {
-                                $v_outlist[$v_ldinput->name] = $o;
-                                $o = null;
-                            }
-                        }
-                        $v_ldinput = $v_ldinput->parent;
-                    }
-                    break;
-                case self::T_GRAPH_TYPE:
-                    $f_info->type = $v;
-                    break;
-                case self::T_GRAPH_DEFAULT:
-                    $f_info->default = $v;
-                    break;
-                case self::T_GRAPH_NAME:
-                    if ($v_start) {
-                        if (!empty($f_info->name)) {
-                            if ($v_alias) {
-                                // move alias to target
-                                $f_info->alias = $f_info->name;
-                                $f_info->name = $v;
-                                $v_alias = false;
-                                break;
-                            }
-                            $this->_update_mark($o, $f_info, $data, $v_chain_args->basePath());
-                            $v_init_graph_obj = false;
-                        }                       
-                        $f_info->name = $v;
-                        $f_info->description = $v_description;
-                        $v_description = null;
-                    } else {
-                        if ($v_ldinput && $v_def_name) {
-                            $v_ldinput->name = $v;
-                            $v_def_name = false;
-                        } else if ($tn = $this->_get_token($v)) {
-                            // create definition - 
-                            if ($tn === self::T_GRAPH_DECLARE_INPUT) {
-                                $v_pinput = $v_ldinput;
-                                $v_ldinput = GraphQlDeclaredInputFactory::Create($v)  ?? igk_die('missing declared input name [' . $v . ']');
-                                
-                                if (!isset($v_declaredInputs[$v])){
-                                    $v_declaredInputs[$v] = [];
-                                }
-                                
-                                $v_declaredInputs[$v][] = $v_ldinput;
-                                $v_def_name = true;
-                                $v_ldinput->parent = $v_pinput;
-                                if ($v_description) {
-                                    $v_ldinput->description = $v_description;
-                                }
-                                $v_description = null;
-                                if ($v_ldinput->readDefinition($this)){
-                                    $v_ldinput = $v_ldinput->parent;
-                                }
-                            }
-                            if ($tn === self::T_GRAPH_DECLARE_TYPE){
-                                $v_pinput = $v_ldinput;
-                                $v_type_name = '';
-                                if ($this->read()){
-                                    $e = $this->m_token;
-                                    if ($e[0] == self::T_GRAPH_NAME){
-                                        $v_type_name = $e[1];
-                                    }
-                                }else{
-                                    throw new GraphQlSyntaxException('missing type name');
-                                }
-                                $v_ldinput = new GraphQlDeclaredType();
-                                $v_ldinput->name = $v_type_name;
-                                $v_declaredTypes[$v_type_name] = $v_ldinput;
-                                $v_def_name = true;
-                                // $v_ldinput->parent = $v_pinput;
-                                if ($v_description) {
-                                    $v_ldinput->description = $v_description;
-                                }
-                                $v_description = null;
-                                // $o = null;
-                                $this->_read_type_definition($v_ldinput);
-                            }
-                        }
-                    }
-                    break;
-                case self::T_GRAPH_TYPE_DEFINITION:
-                    $f_info->type = $v["type"];
-                    $f_info->default = $v["default"];
-                    $f_info->description = $v_description;
-                    $this->_update_mark($o, $f_info, $data, null); 
-                    $v_description = null;
-                    break;
-                case self::T_GRAPH_ARGUMENT:
-                    // Agument for reading info
-                    if ($v_ldinput && !$f_info) {
-
-                        // $v_n = $v_ldinput->name;
-                        // depending on type
-                        if ($v_ldinput->type == 'query') {
-                            // passing definition type 
-                            $v_ldinput->setParameter($v);
-                            break;
-                        }
-                    }
-                    if (!empty($n = $f_info->name)) {
-                        $tab = $this->_get_field_info($n);
-                        $n = $tab["name"];
-                        // must call argument
-                        $cvalue = null;
-                        $r_name = igk_getv($e, 2) ?? $n;
-                        if ($this->m_listener) {
-                            // get graph data 
-                            $fc = new ReflectionMethod($this->m_listener, $r_name);
-                            $v_type = $v_ldinput ? $v_ldinput->type : 'query'; 
-                            $params = $this->_getMethodParameter($v, $v_type, $v_injector);
-                            $pc = count($params);
-                            $tc = $fc->getNumberOfRequiredParameters();
-                            if ($pc < $tc) {
-                                igk_die(sprintf('missing required parameter %s. expected %s', $pc, $tc));
-                            } 
-                            $params = Dispatcher::GetInjectArgs($fc, $params);
-                            $cvalue = $this->m_listener->$r_name(...$params); //(array)$v);
-                        }
-                        array_push($p, $data);
-                        $data = GraphQlData::Create($cvalue);
-                        $v_alias = false;
-                        $f_info->type = self::T_TYPE_QUERY_FUNC;
-                    }
-                    break;
-            }
-        }
-        if (!empty($f_info->name)) {
-            // + | last update mark
-            $this->_update_mark($o, $f_info, $data, $v_chain_args->path());
-        } 
-        if ($v_alias) {
-            $v_alias = false;
-        }
-        if ($v_outlist) {
-            $o = $v_outlist;
-        }
-
-        igk_hook(self::HOOK_LOADING_COMPLETE, [$this, & $o]);
-    }
-
-    /**
-     * end graph reading to update value 
-     * @param mixed $o 
-     * @param GraphQlData $data 
-     * @return bool 
-     */
-    protected function _end_graph_end(GraphQlData $data):bool{
-        if ($data->isProvided()){
-            return false;
-        }
-        if ($this->m_listener){
-            $v_qo = $this->m_listener->query();
-            $data->storeEntry($v_qo);
-            return true;
-        }
-        return false;
-
-
-    }
-
-    public function getData($q, $data) {
-        $o = $data;
-        while($o && ( count($q)>0)){
-            //$o = array_shift($q);
-            $o = array_pop($q);
-            break;
-        }
-        return $o;
-    }
-
-    /**
-     * read type definition 
-     * @param mixed $definition 
+     * 
+     * @param mixed $o data to update
+     * @param GraphQlReadSectionInfo $section 
+     * @param mixed $data source data
      * @return void 
      * @throws IGKException 
      */
-    protected function _read_type_definition($definition){
-        // + | --------------------------------------------------------------------
-        // + | type typeName{ \
-        // + |      field: Type[!]|[Type][!]|=
-        // + | }
-        // + |
-        
-        $v_level = 0;
-        $v_end = false;
-        while(!$v_end && $this->read()){
-            $e = $this->m_token;
-            switch($e[0]){
-                case self::T_GRAPH_END:
-                    $v_level--;
-                    if ($v_level===0){
-                        $v_end = true;
-                    }
-                    break;
-                case self::T_GRAPH_START:
-                    $v_level++;
-                    break;
+    protected function _update_properties(&$o, GraphQlReadSectionInfo $section, $data)
+    {
+
+        foreach ($section->properties as $k => $def) {
+            if ($def->section && $def->section->name) {
+                // $obj = igk_conf_get($data, 'lastname/surname');
+                $o[$def->section->name] = new GraphQlUpdateField($this, $def, $def->section->name, $data, $o);
+                continue;
+            }
+            $v_k = $def->alias ?? $k;
+            if (!key_exists($v_k, $o)) {
+                $o[$v_k] = igk_getv($data, $def->name); //$this->_get_value($def, $v_chain_args);
             }
         }
     }
     /**
-     * store parameter request 
-     * @param mixed $params 
-     * @param string $type 
-     * @param null|GraphQlQueryOptions $request 
-     * @return array 
-     * @throws IGKException 
+     * get the current listener 
+     * @return ?IGraphQlInspector 
      */
-    private function _getMethodParameter($params, $type = 'query', ?GraphQlQueryOptions $request=null)
-    {
-        $request && $request->clear();
-        $tab = [];
-        foreach ($params as $t => $v) {
-            $d = null;
-            if ($type == 'mutation') {
-                $d = $v;
-                if ($v[0] == '$') {
-                    $tn = substr($v, 1);
-                    if (key_exists($tn, $this->variables)) {
-                        $d = $this->variables[$tn];
-                    }
-                }
-            } else {
-                if ($t[0] == '$') {
-                    $tn = substr($t, 1);
-                    $d = (is_object($v) || is_array($v) ? igk_getv($this->variables, $tn) : null) ?? igk_getv($v, 'default');
-                }else {
-                    $d = $v; 
-                }
-            }
-            $tab[] = $d;
-            $request->store($t, $d);
-        }
-
-        return $tab;
-    }
-    /**
-     * convert string to alias name
-     * @param string $n 
-     * @return array 
-     */
-    protected function _get_field_info(string $n)
-    {
-        $tab = explode(' ', $n);
-        $alias = $name = array_pop($tab);
-        if (count($tab) > 0) {
-            $alias = array_shift($tab);
-        }
-        return compact("name", "alias");
-    }
-
-    /**
-     * load spread info
-     * @return void 
-     */
-    protected function _load_spread_info(& $f_info , $e , & $o, & $p, & $q, $data, ?string $v_description=null){
-        $v_name = $e[2]; 
-        $v_s = new GraphQlSpreadInfo($v_name);  
-        $o[] = $v_s;
-        // go to chain properties to update fields
-    }
-    protected function _update_mark(&$o, &$f_info, $data, ?string $path =  null)
-    {
-        $n = $f_info->name;
-        if (empty($n)) {
-            igk_die("name is empty");
-        }
-        $v_data = $data ? $data->first() : null; 
-        $data->storeInfo($n, $f_info);
-        $v = $f_info->default;
-        if ($v_data && $path && !$data->isIndex()){
-            // chain path 
-            $v_data = igk_conf_get($v_data, $path); 
-            if (is_array($v_data)){
-                $v_data = igk_getv(array_values($v_data), 0);
-            }
-        }
-
-        // + | update last info values
-        if (!is_null($v_data)) {
-            $v = $data->getValue($f_info->name, $v_data, $this->_get_model_callback());
-        }
-        $o[$n] = $v;
-        // + | create new info
-        $f_info = $this->_create_info();  
-        return $n;
-    }
-    protected function _update_value(& $o, GraphQlData $data){
-        $infos = $data->getInfo();
-        $v_data = $data->first();
-        $v_callback = $this->_get_model_callback();
-        foreach($o as $k=>$v){
-            if (is_numeric($k)){
-                $v->updateFields($this, $k, $o, $data, $v_data, $v_callback);
-            }
-        }
-           // + | update last info values
-        foreach($infos as $k=>$f_info){
-            $v = $data->getValue($f_info->name, $v_data, $v_callback);
-            $o[$k] = $v;
-        }
+    public function getListener(){
+        return $this->m_listener;
     }
     /**
      * resolv map data - priority to listener 
@@ -617,313 +928,28 @@ class GraphQlParser
     {
         if ($this->m_listener instanceof IGraphQlMapDataResolver)
             return $this->m_listener->getMapData($typeName);
-        return igk_getv($this->mapData, $typeName);
+        return igk_getv($this->m_mapData, $typeName);
     }
-    /**
-     * 
-     * @return void 
-     */
-    protected function __construct()
+    protected function _update_chain_args(GraphQlChainGraph $chain_args, $id, $v, &$chain_start)
     {
+        $chain_args->update($id, $v, $chain_start);
     }
-
-    protected function _export_arg_definition(string $l, ?string $name = null)
+    protected function _get_value($definition, $v_chain_args)
     {
-        $r = new ConfigurationReader;
-        $r->delimiter = ',';
-        $r->separator = ':';
-        // with bracket treat argument expression
-        $r->escape_start= '[';
-        $r->escape_end= ']'; 
-        // + | transform inline array definition to expression of json - decoding
-        $l = $r->treatExpression($l, $expression);
-     
-        $o = $r->read($l);
-        foreach ($o as $k => $v) {
-            if (is_null($v)){
-                continue;
+        $data = null;
+        if (!$this->m_data->isProvided()) {
+            if ($this->m_listener) {
+                $data = $this->m_listener->query();
             }
-            $p = explode('=', $v, 2);
-            if (count($p) >= 2) {
-                $d = trim($p[1]);
-                $t = trim($p[0]);
-                if (is_numeric($d)) {
-                    $d = floatval($d);
-                }
-                $o->$k = ['default' => $d, 'type' => $t, 'directive' => null];
-            }
-            if ($expression && key_exists($v, $expression)){
-                $o->$k = json_decode($expression[$v]);
-            }
+        } else {
+            $data = $this->m_data->first();
         }
-        // read argument
-        $this->m_token = [self::T_GRAPH_ARGUMENT, $o, $name];
-        $this->m_readMode = self::READ_NAME;
-        return true;
-    }
-    /**
-     * read add move next
-     * @return bool 
-     * @throws IGKException 
-     */
-    public function read(): bool
-    {
-        $pos = &$this->m_offset;
-        $ln = strlen($this->m_text);
-        $l = "";
-        $skip = false;
-
-        while ($pos < $ln) {
-            $ch = $this->m_text[$pos];
-            $pos++;
-            switch ($this->m_readMode) {
-                case self::READ_ARGUMENT:
-                    $l = $ch . $this->_read_argument($pos, $ln);
-                    $pos++;
-                    return $this->_export_arg_definition($l);
-                    // $r = new ConfigurationReader;
-                    // $r->delimiter = ',';
-                    // $r->separator = ':';
-                    // $o = $r->read($l);
-                    // // read argument
-                    // $this->m_token = [self::T_GRAPH_ARGUMENT, $o];
-                    // $this->m_readMode = self::READ_NAME;
-                    // return true;
-                case self::READ_DEFINITION:
-                    $l = $ch . $this->_read_definition($pos, $ln);
-                    if (preg_match("/(?P<n>[^\(]+\()/", $l)) {
-                        // is method declaraion 
-                        $tpos = strpos($l, '(');
-                        $n = trim(substr($l, 0, $tpos));
-                        $g = trim(igk_str_read_brank($l, $tpos, ')', '('), '()');
-                        return $this->_export_arg_definition($g, $n);
-                    }
-
-
-                    $r = new ConfigurationReader;
-                    $o = $r->read($l);
-                    $type = $o ? array_keys((array)$o)[0] : null;
-                    $value = null;
-                    if ($type && $this->_is_know_type($type)) {
-                        if (is_null($value = $o->$type)) {
-                            $value = $this->_get_known_default_value($type);
-                        } else {
-                            $value = $this->_get_known_value($type, $value);
-                        }
-                    } else {
-                        if (!$type || is_null($value = $o->$type)) {
-                            // constant value
-                            $value = $type;
-                            $type = 'mixed';
-                        }
-                    }
-                    $this->m_token = [self::T_GRAPH_TYPE_DEFINITION, ['type' => $type, 'default' => $value]];
-                    $this->m_readMode = self::READ_NAME;
-                    return true;
-            }
-
-            switch ($ch) {
-                case '.':
-                    if (($v_spead = $ch . substr($this->m_text, $pos, 2)) == self::SPEAR_OPERATOR) {
-                        $v_d = [self::T_GRAPH_SPREAD_OPERATOR, $v_spead];
-                        $pos += 2;
-                        $v_name = $this->_read_name($pos);
-                        if (empty($v_name)){
-                            throw new GraphQlSyntaxException("spear operation missing name");
-                        }
-                        $v_d[] = $v_name;
-                        $this->m_token = $v_d;
-                        return true;
-                    }
-                    break;
-                case '"':
-                    // detect multi cell description 
-                    if ($ch . substr($this->m_text, $pos, 2) === '"""') {
-                        $noffset = $pos + 2;
-                        if (($cpos = strpos($this->m_text, '"""', $noffset)) === false) {
-                            // missing close tag
-                            return false;
-                        }
-                        $v = $ch . substr($this->m_text, $pos, $cpos + 2);
-                        $this->m_token = [self::T_GRAPH_MULTI_STRING,  $v];
-                        $pos = $cpos + 3;
-                        return true;
-                    }
-                    $v = $ch . igk_str_read_brank($this->m_text, $pos, $ch, $ch);
-                    $this->m_token = [self::T_GRAPH_STRING,  $v];
-                    $pos++;
-                    return true;
-                case "#":
-                    $e = strpos($this->m_text, "\n", $this->m_offset);
-                    if ($e !== false) {
-                        $v = substr($this->m_text, $pos, $e - $pos);
-                        $pos = $e + 1;
-                    } else {
-                        $v = substr($this->m_text, $pos);
-                        $pos = $ln + 1;
-                    }
-                    $this->m_token = [self::T_GRAPH_COMMENT, $ch . $v];
-                    return true;
-                case '{':
-                    $pv = trim($l);
-                    if (!empty($pv) && $this->_handle_name($pv, $pos))
-                        return true;
-                    $this->m_token = [self::T_GRAPH_START, $ch];
-                    return true;
-                case '}':
-                    if (!empty($pv = trim($l))) {
-                        $pos--;
-                        $this->m_token = [self::T_GRAPH_NAME, $pv];
-                        return true;
-                    }
-                    $this->m_token = [self::T_GRAPH_END, $ch];
-                    return true;
-                case ':':
-                    if ($this->_handle_name($l, $pos))
-                        return true;
-                    $this->m_token = $ch;
-                    $this->m_readMode = self::READ_DEFINITION;
-                    return true;
-                case ' ':
-                    if (!$skip) {
-                        $pos++;
-                        if ($this->_handle_name($l, $pos))
-                            return true;
-                        $pos--;
-                        $l .= $ch;
-                    }
-                    $skip = true;
-                    break;
-                case '(': // start reading argument 
-                    if ($this->_handle_name($l, $pos))
-                        return true;
-                    $this->m_token = $ch;
-                    $this->m_readMode = self::READ_ARGUMENT;
-                    return true;
-                case ')': // end read argument
-                    $this->m_token = $ch;
-                    $this->m_readMode = self::READ_END_ARGUMENT;
-                    return true;
-                default:
-                    $ip = strpos(self::LITTERAL_TOKEN, $ch);
-                    if ($ip !== false) {
-                        $l .= $ch;
-                        $skip = false;
-                    } else {
-                        if ($this->m_readMode == self::READ_NAME) {
-                            $n = trim($l);
-                            if (!empty($n)){
-                                if (strpos($n, "__") === 0) {
-                                    $this->m_token = [self::T_GRAPH_INTROSPECTION, $n];
-                                    return true;
-                                }
-                                $token = $this->_get_token($n) ?? self::T_GRAPH_NAME;
-                                $this->m_token = [$token, $n];
-                                return true;
-                            }
-                        }
-                    }
-                    break;
-            }
+        if ($data) {
+            return igk_getv($data, $definition->name);
         }
-        return false;
+        return null;
     }
-    protected function _igk_get_know_parser($type)
-    {
-        $cl = __NAMESPACE__ . '\\GraphQl' . $type . 'Parser';
-        if (class_exists($cl)) {
-            $cl = new $cl;
-            return $cl;
-        }
-    }
-    protected function _get_known_value($type, $value)
-    {
-        if ($parser = $this->_igk_get_know_parser($type)) {
-            return $parser->parse($value);
-        }
-        return $value;
-    }
-    protected function _get_known_default_value($type)
-    {
-        return igk_getv([
-            "String" => "",
-            "Int" => 0,
-            "Float" => 0.0,
-            "Double" => 0.0,
-            "Date" => date("Y-m-d"),
-            "DateTime" => date("Y-m-d H:i:s"),
-        ], $type);
-    }
-    protected function _is_know_type($t)
-    {
-        return in_array($t, array_merge(explode('|', 'String|Int|Float|Double|Date|DataTime'), $this->m_declared_types));
-    }
-    public function token()
-    {
-        return $this->m_token;
-    }
-    protected function _handle_name($l, &$pos): bool
-    {
-        if (!empty($l)) {
-            $pos--;
-            $this->m_token = [self::T_GRAPH_NAME, trim($l)];
-            return true;
-        }
-        return false;
-    }
-    protected function _read_definition(&$pos, $ln)
-    {
-        $v = "";
-        while ($pos < $ln) {
-            $ch = $this->m_text[$pos];
-            $pos++;
-            switch ($ch) {
-                case '{':
-                case '}':
-                case "\n":
-                case ',':
-                    $pos--;
-                    return $v;
-            }
-            $v .= $ch;
-        }
-        return $v;
-    }
-    /**
-     * 
-     * @param mixed $pos 
-     * @param mixed $ln 
-     * @return string 
-     */
-    protected function _read_argument(&$pos, $ln)
-    {
-        $v = "";
-        $depth = 1;
-        while ($pos < $ln) {
-            $ch = $this->m_text[$pos];
-            $pos++;
-            switch ($ch) {
-                case '(':
-                    $depth++;
-                case ')':
-                    $depth--;
-                    if ($depth == 0) {
-                        $pos--;
-                        return $v;
-                    }
-                    break;
-            }
-            $v .= $ch;
-        }
-        return $v;
-    }
-    /**
-     * is token reserver words
-     * @param string $n 
-     * @return mixed 
-     * @throws IGKException 
-     */
-    protected function _get_token(string $n)
+    protected function _check_declared_token(string $name)
     {
         return igk_getv([
             "type" => self::T_GRAPH_DECLARE_TYPE,
@@ -936,34 +962,506 @@ class GraphQlParser
             "fragment" => self::T_GRAPH_DECLARE_INPUT,
             "enum" => self::T_GRAPH_DECLARE_INPUT,
             "subscription" => self::T_GRAPH_DECLARE_INPUT,
-        ], $n);
+        ], $name);
     }
 
-    protected function _read_name(int & $pos){
-        $v_length  =  strlen($this->m_text);
-        $v_result = '';
-        while($pos < $v_length){
-            $ch = $this->m_text[$pos];
-            $ip = strpos(self::LITTERAL_TOKEN, $ch);
+    protected function _bind_delcaredInput(string $name, &$def_name, ?string $description = null)
+    {
+        $v_declaredInputs = &$this->m_declaredInput;
+        $v_ldinput = &$this->p_loadInput;
+        $def_name = false;
+        $tn = $this->_check_declared_token($name);
+        $v_declaredTypes = null;
+     
+        $v = $name;
+        // create definition - 
+        if ($tn === self::T_GRAPH_DECLARE_INPUT) {
+            // $v_pinput = $v_ldinput;
+            $v_ldinput = GraphQlDeclaredInputFactory::Create($v)  ?? igk_die('missing declared input name [' . $v . ']');
 
-            if ($ip === false){
+            $v_ldinput->description = $description;
+            if (!isset($v_declaredInputs[$v])) {
+                $v_declaredInputs[$v] = [];
+            }
+
+
+            $v_declaredInputs[$v][] = $v_ldinput;
+            if ($v_ldinput->readDefinition($this)) {
+                $v_ldinput = $v_ldinput->parent;
+            } else {
+                // query request
+                $def_name = true;
+            }
+        }
+        if ($tn === self::T_GRAPH_DECLARE_TYPE) {
+            // $v_pinput = $v_ldinput;
+            if (!isset($v_declaredInputs['type'])) {
+                $v_declaredInputs['type'] = [];
+            }
+            $v_declaredTypes =  &$v_declaredInputs['type'];
+            $v_type_name = '';
+            if ($this->read()) {
+                $e = $this->m_token;
+                if ($e[0] == rConst::T_READ_NAME) {
+                    $v_type_name = $e[1];
+                }
+            } else {
+                throw new GraphQlSyntaxException('missing type name');
+            }
+            $v_ldinput = new GraphQlDeclaredType();
+            $v_ldinput->name = $v_type_name;
+            $v_ldinput->description = $description;
+            $v_declaredTypes[$v_type_name] = $v_ldinput;
+
+            $v_ldinput->readDefinition($this);
+            //$v_declaredInputs['type'][] = $v_declaredTypes;
+        }
+    }
+    /**
+     * init and chain section 
+     * @param null|GraphQlReadSectionInfo $v_section 
+     * @return GraphQlReadSectionInfo 
+     */
+    // protected function _chain_info(?GraphQlReadSectionInfo $v_section): GraphQlReadSectionInfo
+    // {
+    //     $v_parent = $v_section;
+    //     $v_section = new GraphQlReadSectionInfo($this, );
+    //     $v_section->parent = $v_parent; 
+    //     return $v_section;
+    // }
+
+    protected function _endLoading(GraphQlReadSectionInfo $info, $data, $sourceMap=null)
+    {
+        // + | query end - 
+        if (($data instanceof GraphQlData)&& $data->isProvided() ) {
+            if ($info->parent && !$data->isIndex()) {
+                $path = $info->getFullPath();
+                $data = igk_conf_get($data->entry, $path);
+            }
+        }
+        igk_hook( GraphQlHooks::HookName( GraphQlHooks::HOOK_END_SECTION), 
+            [$this, $info, $data, $sourceMap]);
+    }
+
+    /**
+     * get the stored token info
+     * @return string|array
+     */
+    public function token()
+    {
+        return $this->m_token;
+    }
+
+    protected function _is_alias(&$offset): bool
+    {
+        $v_alias = false;
+        while ($offset < $this->m_length) {
+            $ch = $this->m_query[$offset];
+            if ($ch == ':') {
+                $v_alias = true;
+                break;
+            } else if (trim($ch) == '') {
+                $offset++;
+            } else
+                break;
+        }
+        return $v_alias;
+    }
+    /**
+     * read and progress
+     * @return bool 
+     */
+    public function read(): bool
+    {
+        $offset = &$this->m_offset;
+        $v_skip_space = false;
+        $v_query = $this->m_query;
+        $v = '';
+        $ln_field = false;
+        while ($offset < $this->m_length) {
+            $ch = $this->m_query[$offset];
+            if ($ln_field) {
+                if ($ch != "\n") {
+                    return $this->_gen_token([rConst::T_READ_END_FIELD, '\n']);
+                }
+            }
+            $v_in_token = strpos(rConst::T_TOKEN, $ch)!== false;
+            if (!$v_in_token) {
+                if (!empty($v)) {
+                    // check for alias
+                    $alias = $this->_is_alias($offset);
+                    return $this->_gen_token([$alias ? rConst::T_READ_ALIAS : rConst::T_READ_NAME, $v]);
+                }
+            }
+            $offset++;
+            switch ($ch) {
+                case '.':
+                    // + | check for fragment spear 
+                    // + | syntax 1 : ...spear_name
+                    // + | syntax 2 (inline spear ): ... on TYPE{ field_n+ }
+                    if (($v_spead = $ch . substr($this->m_query, $offset, 2)) == rConst::SPEAR_OPERATOR) {
+                        $v_d = [rConst::T_READ_SPEAR, $v_spead];
+                        $offset += 2;
+                        $v_name = $this->_read_name($offset);
+                        if (empty($v_name)) {
+                            // detect next 'on'
+                            if (($rp = strpos($this->m_query, 'on ',$offset))!==false){
+                                if (trim(substr($this->m_query, $offset, ($rp+3) - $offset)) == 'on'){
+                                    return $this->_gen_token([rConst::T_READ_INLINE_SPEAR, '']);
+                                }
+
+                            }
+                            throw new GraphQlSyntaxException("spear operation missing name");
+                        }
+                        $v_d[] = $v_name;
+                        $this->m_token = $v_d;
+                        return true;
+                    }
+                    break;
+                case '(': // read argument definition
+                    return $this->_read_func_args();
+                case ')':
+                    return $this->_gen_token([rConst::T_READ_END_FUNC_ARGS, $ch]);
+                case '#': // read line comment
+                    $v = $ch . $this->_read_comment();
+                    return $this->_gen_token([rConst::T_READ_COMMENT, $v]);
+                case '{':
+                    return $this->_gen_token([rConst::T_READ_START, $ch]);
+                case '}':
+                    return $this->_gen_token([rConst::T_READ_END, $ch]);
+                case '@':
+                    return $this->_read_directive();
+                case '"':
+                    $p = $ch . substr($v_query, $offset, 2);
+                    $desc = '';
+                    if ($p == '"""') {
+                        // read multi line description 
+                        $offset += 3;
+                        $desc = $this->_read_multiline_doc();
+                    } else {
+                        $d = trim(igk_str_remove_quote($ch . igk_str_read_brank($v_query, $offset, $ch, $ch)));
+                        $desc = $d; //$this->_read_single_line_doc();
+                        $offset++;
+                    }
+                    return $this->_gen_token([rConst::T_READ_DESCRIPTION, $desc]);
+
+                case '=':
+                    // by default read default value 
+                    if (!empty($v)) {
+                        return $this->_gen_token([rConst::T_READ_NAME, $v]);
+                    }
+
+                    return $this->_read_default_value();
+
+                    break;
+                case ' ':
+                    if (!$v_skip_space) {
+                        $v_skip_space = true;
+                    }
+                    break;
+                case "\n":
+                case ",":
+                    // if , split end - block
+                    if ($ch == "\n") {
+                        $ln_field = true;
+                    } else {
+                        return $this->_gen_token([rConst::T_READ_END_FIELD, $ch]);
+                    }
+
+                    break;
+                default:
+                    if ($v_in_token !== false) {
+                        $v .= $ch;
+                    } else {
+                        if (!empty($v)) {
+                            return $this->_gen_token([rConst::T_READ_NAME, $v]);
+                        }
+                    }
+                    break;
+            }
+        }
+        return false;
+    }
+    protected function _gen_token($v)
+    {
+        $this->m_token = $v;
+        return true;
+    }
+    protected function _read_default_value(): bool{
+        $v = '';
+
+
+        $offset = &$this->m_offset;
+        $end = false;
+        $r = false;
+        while (!$end && ($offset < $this->m_length)) {
+            
+            $ch = $this->m_query[$offset];
+            $offset++;
+            if (!$r && empty(trim($ch))){
+                if (!is_numeric($ch)){
+                    continue;
+                }
+            }
+          
+            if (($ch=="\"")||($ch=="'")){
+                $v = igk_str_remove_quote($ch.igk_str_read_brank($this->m_query, $offset,$ch,$ch));
+                $offset++;
                 break;
             }
-            $pos++;
-            $v_result .=$ch;
+            if ($r && empty(trim($ch))){
+                break;
+            }
+            $v .= $ch;
+            $r = true;
+
         }
-        return $v_result;
-    }  
-    
-    /**
-     * read scope name
-     * @return null|string 
-     */
-    public function readName():?string{
-        $pos = & $this->m_offset;
 
-        return $this->_read_name($pos);
-
+        if (is_numeric($v)){
+            $v = floatval($v);
+        } else if (in_array($v, ['null', 'nil'])){
+            $v = null;
+        }
+        return $this->_gen_token([rConst::T_READ_DEFAULT_VALUE, $v]);
     }
-    
+    protected function _read_directive(): bool
+    {
+        $n = $this->_read_name();
+        $d = new GraphQlDirectiveInfo;
+        $d->name = $n;
+        $offset = &$this->m_offset;
+        $end = false;
+        while (!$end && ($offset < $this->m_length)) {
+            $ch = $this->m_query[$offset];
+            $offset++;
+            if (empty(trim($ch))) {
+                continue;
+            }
+            if ($ch == "(") {
+                if ($this->_read_func_args()) {
+                    $e = $this->token();
+                    if ($e[0] == rConst::T_READ_FUNC_ARGS) {
+                        $d->args = $e[1];
+                        $d->args_expression = $e[2];
+                    }
+                }
+                $end = true;
+            } else {
+                // + | directive missing argument
+                $offset--;
+                break;
+            }
+        }
+
+        return $this->_gen_token([rConst::T_READ_DIRECTIVE, $d]);
+    }
+    /**
+     * read name 
+     * @return string 
+     */
+    protected function _read_name()
+    {
+        $end = false;
+        $offset = &$this->m_offset;
+        $s = '';
+        while (!$end && ($offset < $this->m_length)) {
+            $ch = $this->m_query[$offset];
+            if (strpos(rConst::T_TOKEN, $ch) === false) {
+                $end = true;
+                continue;
+            }
+            $s .= $ch;
+            $offset++;
+        }
+        return $s;
+    }
+    protected function _read_variables()
+    {
+        // read variable and remplcate car 
+    }
+    protected function _read_func_args()
+    {
+        $args = null;
+        $s = '';
+        $end = false;
+        $offset = &$this->m_offset;
+        while (!$end && ($offset < $this->m_length)) {
+            $ch = $this->m_query[$offset];
+            if ($ch == ")") {
+                $end = true;
+                continue;
+            }
+            switch ($ch) {
+                case '"':
+                    $ch = $ch . igk_str_read_brank($this->m_query, $offset, $ch, $ch);
+                    break;
+            }
+            $s .= $ch;
+            $offset++;
+        }
+        $args = !empty($s) ? $this->_export_arg_definition($s) : null;
+        // parse func args 
+        return $this->_gen_token([rConst::T_READ_FUNC_ARGS, $args, $s]);
+    }
+    /**
+     * export argument 
+     * @param string $data 
+     * @return false|stdClass 
+     */
+    protected function _export_arg_definition(string $data)
+    {
+        $tvar = []; 
+        $tvar = GraphQlReaderUtils::MergeVariableToExport($this->m_variables, 
+        $this->p_loadInput->argument);
+
+        $v_export = new GraphQlExportArgument;
+        $v_export->variables = $tvar;
+        $o = $v_export->export($data);
+        return $o;
+    }
+    /**
+     * read single line-comment 
+     * @return mixed 
+     */
+    protected function _read_comment()
+    {
+        $s = $this->m_query;
+        $pos = strpos($s, "\n", $this->m_offset);
+        if ($pos === false) {
+            $v = substr($s, $this->m_offset);
+            $this->m_offset = $this->m_length;
+        } else {
+            $v = trim(substr($s, $this->m_offset, $pos - $this->m_offset));
+            $this->m_offset = $pos + 1;
+        }
+        return trim($v);
+    }
+    protected function _read_multiline_doc()
+    {
+        $s = $this->m_query;
+        $pos = strpos($s, '"""', $this->m_offset);
+        if ($pos === false) {
+            $v = substr($s, $this->m_offset);
+            $this->m_offset = $this->m_length;
+        } else {
+            $v = trim(substr($s, $this->m_offset, $pos - $this->m_offset));
+            $this->m_offset = $pos + 3;
+        }
+        return trim($v);
+    }
+    protected function _read_single_line_doc()
+    {
+        $v = $this->_read_comment();
+        return $v;
+    }
+
+    /**
+     * get root data
+     * @return mixed 
+     */
+    public function _get_root_data()
+    {
+        if ($this->m_data && $this->m_data->isProvided()) {
+            return $this->m_data->entry;
+        }
+        if ($this->m_listener) {
+            if ($rdata = $this->m_listener->query()) {
+                return GraphQlData::Create($rdata)->entry;
+            }
+        }
+        return null;
+    }
+
+
+    public function updateField()
+    {
+        // if parent is indexed array
+        //      - iterate in array component and get scoped value 
+        // else 
+        //      - invoke parent field data - and target property section
+    }
+
+    /**
+     * invoke listener method
+     */
+    public function invokeListenerMethod($name, $args, $data=null, 
+        ?GraphQlReadSectionInfo $section=null,
+        string $type_call='query')
+    {
+        if (is_null($this->m_listener)){
+            throw new GraphQlSyntaxException(sprintf('missing Object Inspector to handle [%s] operation.', $name));
+            // return [
+            //     ['name'=>'Sangoku','page'=>'4445'],
+            //     ['name'=>'Tintin','page'=>'4445'],
+            // ];
+        }
+        $r_name = $name;
+        $v_injector = Dispatcher::GetInjectTypeInstance(GraphQlQueryOptions::class, null);
+        $fc = new ReflectionMethod($this->m_listener, $r_name);
+        $v_type = $type_call ?? ($this->p_loadInput ? $this->p_loadInput->type : null) ?? 'query'; 
+        $params = $this->_getMethodParameter($args, $v_type, $v_injector);
+        $v_injector->data = $data;
+        $v_injector->setContext($v_type);
+        $pc = count($params);
+        $tc = $fc->getNumberOfRequiredParameters();
+        if ($pc < $tc) {
+            igk_die(sprintf('missing required parameter %s. expected %s', $pc, $tc));
+        }
+        $v_closure = \Closure::fromCallable([$this->m_listener, $r_name])
+        ->bindTo($this->m_listener);
+        $v_injector->setSection($section);
+        $v_injector->setCallable($v_closure);
+        $params = Dispatcher::GetInjectArgs($fc, $params);
+        $cvalue = $this->m_listener->$r_name(...$params);
+        return $cvalue;
+    }
+    /**
+     * store parameter request 
+     * @param mixed $params 
+     * @param string $type 
+     * @param null|GraphQlQueryOptions $request 
+     * @return array 
+     * @throws IGKException 
+     */
+    private function _getMethodParameter($params, $type = 'query', ?GraphQlQueryOptions $request = null)
+    {
+        $request && $request->clear();
+        if (is_null($params)) {
+            return [];
+        }
+        $tab = [];
+        $v_variables = $this->m_variables;
+        foreach ($params as $t => $v) {
+            $d = null;
+            if ($type == 'mutation') {
+                $d = $v;
+                if ($v[0] == '$') {
+                    $tn = substr($v, 1);
+                    if (key_exists($tn, $v_variables)) {
+                        $d = $v_variables[$tn];
+                    }
+                }
+            } else {
+                if ($t[0] == '$') {
+                    $tn = substr($t, 1);
+                    $d = (is_object($v) || is_array($v) ? igk_getv($v_variables, $tn) : null) ?? igk_getv($v, 'default');
+                } else {
+                    $d = $v;
+                }
+            }
+            $tab[] = $d;
+            $request->store($t, $d);
+        }
+
+        return $tab;
+    }
+
+    /**
+     * expose read name
+     * @return string 
+     */
+    public function readName()
+    {
+        return $this->_read_name();
+    }
 }

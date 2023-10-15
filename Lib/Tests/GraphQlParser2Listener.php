@@ -6,14 +6,22 @@ use igk\io\GraphQl\IGraphQlInspector;
 
 class GraphQlParser2Listener implements IGraphQlInspector{
 
+    private $m_sourceType;
+
+    public function getSourceTypeName(): ?string
+    {
+        return $this->m_sourceType;
+    }
     public function query() { 
         return json_decode(file_get_contents(__DIR__."/Data/parser_data.json"));
     }
-    public function users(){
+    public function users( GraphQlQueryOptions $option=null){
+        $data = $option->data;
+        $option->stopIndexing();
         return [
-            ['name'=>'C.A.D','login'=>'cbondje@igkdev.com'],
-            ['name'=>'CHARLES','login'=>'bondje.doue@igkdev.com']
-        ];
+            'name'=> $data->clFirstName,
+            'login'=>$data->clLogin 
+        ]; 
     }
     public function userDetails(int $index){
         return igk_getv($this->users(), $index);

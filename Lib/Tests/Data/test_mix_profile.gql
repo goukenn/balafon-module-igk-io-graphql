@@ -1,0 +1,61 @@
+# @={noThrowOnMissingProperty}
+
+{
+    __typename 
+    ...profile
+    upperCase(){  
+
+        ...profile   
+    }
+}
+
+{
+    x=0
+    y=0
+}
+
+query Query{
+    invoice
+}
+
+
+fragment profile on User{
+    firstname
+    lastname
+}
+
+
+# # """
+# # start userList
+# # """
+# # query userList(type:"male"){
+# #     """
+# #     output summary
+# #     """
+# #     o 
+# #     x: presentation{
+# #         y: fullname{
+# #             g
+# #             h
+# #         }
+# #     }
+# #     # bookList(i:null){
+# #     #     name
+# #     #     authors(type:male){
+# #     #         name,
+# #     #         firstname
+# #     #         birthdate
+# #     #     }
+# #     # }
+# # }
+
+
+query basicQuery{
+    x
+    y
+}
+
+query basicQuery{
+    x,
+    firstname
+}

@@ -1,0 +1,21 @@
+"""
+entry section 
+"""
+{
+    name
+    """
+    list of chain User
+    """
+    ... on User{
+        """
+        first name definition 
+        """
+        firstName
+        lastName
+        gender: sexe
+    }
+    profile
+    ... on Person{
+        refId
+    }
+}

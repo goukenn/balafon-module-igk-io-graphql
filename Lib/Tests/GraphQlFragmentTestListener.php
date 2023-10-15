@@ -6,7 +6,12 @@ use igk\io\GraphQl\IGraphQlInspector;
 
 class GraphQlFragmentTestListener implements IGraphQlInspector
 {
-    
+    private $m_sourceType;
+
+    public function getSourceTypeName(): ?string
+    {
+        return $this->m_sourceType;
+    }
     public function query(){
         return [
             'fragmentUsers'=>[
@@ -24,5 +29,9 @@ class GraphQlFragmentTestListener implements IGraphQlInspector
                 ]
             ]
         ];
+    }
+
+    public function __construct(string $sourceType){
+        $this->m_sourceType = $sourceType;
     }
 }
