@@ -14,22 +14,57 @@ use IGK\Helper\JSonEncodeOption;
 */
 class ServeSchema{
  
-    var $m_data;
-    private $schema;
+    private $m_data;
+    private $m_schema;
 
+    /**
+     * get the schema definition 
+     * @return SchemaDefinition 
+     */
+    public function getSchemaDefinition()
+    {
+        return $this->m_schema; 
+    }
+    /**
+     * set query type name 
+     * @param string $n 
+     * @return void 
+     */
+    public function setQueryTypeName(string $n){
+         $this->m_schema->queryType->name = $n;
+    }
+    /**
+     * set mutation type name
+     * @param null|string $n 
+     * @return $this 
+     */
+    public function setMutationTypeName(?string $n){
+        if (is_null($n)){
+            $this->m_schema->mutationType = null;
+            return $this;
+        }
+        $c = $this->m_schema->mutationType = $this->m_schema->mutationType ?? new SchemaQueryTypeDefinition();
+        $c->name = $n; 
+        return $this;
+   }
     public function __construct()
     {
-        $this->schema =  new SchemaDefinition();
+        $this->m_schema =  new SchemaDefinition();
         $this->m_data = (object)['data'=>[
-            '__schema'=>$this->schema
+            '__schema'=>$this->m_schema
         ]];
     }
     public function render(){
         $empty = JSonEncodeOption::IgnoreEmpty();
         return JSon::Encode($this->m_data, $empty,  JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
     }
-    public function addType($r){
-        $this->schema->types[] = $r;
+    /**
+     * add object type definition 
+     * @param mixed $r 
+     * @return void 
+     */
+    public function addType(SchemaTypeDefinition $r){
+        $this->m_schema->types[] = $r;
     }
 }
 

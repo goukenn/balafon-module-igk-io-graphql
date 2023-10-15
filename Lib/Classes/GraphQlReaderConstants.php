@@ -15,6 +15,7 @@ class GraphQlReaderConstants{
     const T_SPREAD_OPERATOR = '...';
     const T_LITTERAL_DECLARATION='query|mutation|directive';
     const T_RESERVED_PROPERTIES = '__type';
+    const N_INTROSPECTIONQUERY = 'IntrospectionQuery';
 
     
     const T_READ_NAME=1;

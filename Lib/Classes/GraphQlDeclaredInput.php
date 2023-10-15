@@ -40,6 +40,8 @@ class GraphQlDeclaredInput{
      */
     var $description;
 
+    var $argument;
+
     protected function __construct(){        
     }
 

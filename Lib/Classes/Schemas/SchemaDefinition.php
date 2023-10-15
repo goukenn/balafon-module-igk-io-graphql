@@ -7,7 +7,7 @@ namespace igk\io\GraphQl\Schemas;
 
 ///<summary></summary>
 /**
-* 
+* global definition 
 * @package igk\io\GraphQl\Schemas
 */
 class SchemaDefinition{

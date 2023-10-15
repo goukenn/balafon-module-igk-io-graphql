@@ -10,7 +10,7 @@ namespace igk\io\GraphQl\Schemas;
 * used to declare field 
 * @package igk\io\GraphQl\Schemas
 */
-class GraphQLFieldInfo
+class GraphQlFieldInfo
 {
     /**
      * name of the field 

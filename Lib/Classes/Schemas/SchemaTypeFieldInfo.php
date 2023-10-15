@@ -13,10 +13,16 @@ namespace igk\io\GraphQl\Schemas;
 class SchemaTypeFieldInfo{
     var $name;
     var $description;
+    var $alias;
     var $args; // <- field args is a rquired field
     var $type; // <- SchemaTypeFieldTypeDefinition Info
     var $isDeprecated;
     var $deprecationReason;
+
+    public function setAlias(?string $a){
+        $this->alias = $a;
+        return $this;
+    }
     public function __construct()
     {
         $this->type = new SchemaTypeFieldTypeDefinition;

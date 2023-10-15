@@ -38,6 +38,12 @@ class GraphQlParser implements IGraphQlParserOptions
      * @var mixed
      */
     private $m_definition;
+
+    /**
+     * get if intropecting mode
+     * @var mixed
+     */
+    private $m_introspecting;
     
     public function setListener(?IGraphQlInspector $listener){
         $this->m_listener = $listener;
@@ -168,9 +174,12 @@ class GraphQlParser implements IGraphQlParserOptions
     public static function Parse($query_or_query_data, $data_or_listener = null, &$reader = null, 
     ?GraphqlMapData $mapData = null, ?array $initiator = null)
     {
+        if (is_null($query_or_query_data)){
+            return null;
+        }
         $query = $query_or_query_data;
         $variable = null;
-        if (is_array($query)) {
+        if (is_array($query)|| (is_object($query)&&( $query = (array)$query))) {
             $tquery = $query;
             $variable = igk_getv($query, 'variables');
             $query = igk_getv($query, 'query') ?? igk_die('missing query');
@@ -193,6 +202,11 @@ class GraphQlParser implements IGraphQlParserOptions
             Activator::BindProperties($reader, $initiator);
         }
         $o = $reader->_load();
+
+        if ($reader->m_introspecting){
+            return $o;
+        }
+
         $reader->m_definition = $o;
         if ( $data_or_listener ){
             // passing data to chain list 
@@ -215,6 +229,11 @@ class GraphQlParser implements IGraphQlParserOptions
         }
         return $p;
     }
+    private $m_root_data;
+    public function updateSourceData($data, $key, $value){
+        $data[$key] = $value;
+        
+    }
     public function exec($mapping=null){
         $queries = igk_getv($this->getDeclaredInputs(), 'query');
         $mutation = igk_getv($this->getDeclaredInputs(), 'mutation');
@@ -227,9 +246,12 @@ class GraphQlParser implements IGraphQlParserOptions
         if ($queries){
             $root = true;
             $tms = $this->_get_root_data();
+            $this->m_root_data = & $tms;
+            $rm = new RefArrayData($tms);
             while($queries){
                 $q = array_shift($queries);
-                $ms = $tms;
+                // $ms = $tms;
+                $ms = $rm;
                 $section = $q->getSection();
                 $section->setSourceTypeName($sourceType);
                 if (empty($queries) && $root){ 
@@ -385,10 +407,19 @@ class GraphQlParser implements IGraphQlParserOptions
                         unset($v_o);
                     }
                     $sector = new GraphQlSectionReader($this, $v_desc);
-                    $sector->copyState($this);
-              
-                
+                    $sector->copyState($this); 
                     if (($v_o = $sector->read()) !== false) {
+
+                        if (($v_root_count==0) && $this->p_loadInput && ($this->p_loadInput->name == GraphQlReaderConstants::N_INTROSPECTIONQUERY)){
+                            $o = igk_getv($v_o, '__schema');
+                            if ($o){
+
+                                $this->m_introspecting = true;
+                                return GraphQlReaderUtils::GetIntropectionSchema($this->getListener(), $o);
+                            }
+                        }
+
+
                         $v_tabquery = igk_getv($this->getDeclaredInputs(), 'query');
                         $v_tquery = null;
 

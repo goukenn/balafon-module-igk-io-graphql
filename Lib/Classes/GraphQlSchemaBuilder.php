@@ -7,9 +7,9 @@ namespace igk\io\GraphQl;
 use IGK\Controllers\BaseController;
 use IGK\Controllers\SysDbController;
 use IGK\Database\DbColumnInfo;
-use igk\io\GraphQl\Schemas\GraphQLDefinitionBuilder;
-use igk\io\GraphQl\Schemas\GraphQLFieldInfo;
-use igk\io\GraphQl\Schemas\GraphQLType;
+use igk\io\GraphQl\Schemas\GraphQlDefinitionBuilder;
+use igk\io\GraphQl\Schemas\GraphQlFieldInfo;
+use igk\io\GraphQl\Schemas\GraphQlType;
 use IGK\System\Console\Logger;
 
 use IGKSysUtil as sysutil;
@@ -56,7 +56,7 @@ class GraphQLSchemaBuilder
     { 
         $ctrl = $ctrl; // SysDbController::ctrl(); // igk_bondje::ctrl();
         $ctrl->register_autoload();
-        $builder = new GraphQLDefinitionBuilder;
+        $builder = new GraphQlDefinitionBuilder;
         $this->_build($ctrl, function ($table, $info) use ($builder) {
             Logger::info('builder : ' . $table);
             // $n = getTableName();
@@ -67,10 +67,10 @@ class GraphQLSchemaBuilder
             foreach ($info->columnInfo as $clInfo) {
                 $tn = $clInfo->clName;
                 $fn = ($v_prefix && igk_str_startwith($tn, $v_prefix)) ? substr($tn, strlen($v_prefix)) : $tn;
-                $def = new GraphQLFieldInfo;
+                $def = new GraphQlFieldInfo;
                 $def->name = $fn;
 
-                $def->type = GraphQLType::GetTypeFromDbColumnInfo($clInfo);
+                $def->type = GraphQlType::GetTypeFromDbColumnInfo($clInfo);
                 $def->isRequired = true;
                 if (($clInfo->clDefault || is_numeric($clInfo->clDefault)) && !DbColumnInfo::IsDbColumnInfoFunction($clInfo, $clInfo->clDefault)) {
 

@@ -1,6 +1,6 @@
 <?php
 // @author: C.A.D. BONDJE DOUE
-// @file: GraphQLDefinitionBuilder.php
+// @file: GraphQlDefinitionBuilder.php
 // @date: 20230921 16:57:05
 namespace igk\io\GraphQl\Schemas;
 
@@ -11,7 +11,7 @@ use IGK\System\IO\StringBuilder;
 * 
 * @package igk\io\GraphQl\Schemas
 */
-class GraphQLDefinitionBuilder
+class GraphQlDefinitionBuilder
 {
     private $m_types = [];
     private $m_enums = [];
@@ -25,12 +25,34 @@ class GraphQLDefinitionBuilder
      */
     public function addType(string $type, array $definition)
     {
-        if ($type == 'Query') {
-            igk_die("Query is a reserved typed");
-        }
+        // if ($type == 'Query') {
+        //     igk_die("Query is a reserved typed");
+        // }
         $this->m_types[$type] = $definition;
     }
 
+    public function argDefinition($arg){
+
+        $sb = new StringBuilder;
+        $ch = '';
+        $t = $d = null;
+        foreach($arg as $k=>$v){
+            $d = null;
+            if (is_array($v)){
+                $t = array_shift($v) ?? 'String';
+                $d = array_shift($v);
+            }   else {
+                $t = $v;
+            }
+
+            $sb->append($ch.$k.':'.$t);
+            if ($d){
+                $sb->append(' = '.$d);
+            }
+            $ch=',';
+        }
+        return $sb.'';
+    }
     /**
      * render definition
      */
@@ -43,6 +65,9 @@ class GraphQLDefinitionBuilder
             foreach ($def as $key => $def) {
                 # code...
                 $s .= "\t" . $def->name;
+                if ($def->args){
+                    $s.= sprintf('(%s)', $this->argDefinition($def->args));
+                }
                 if ($def->type) {
                     $ts = '';
                     $ts .= $def->type;
