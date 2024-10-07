@@ -16,5 +16,9 @@ interface IGraphQlInspector{
      * @return null|string 
      */
     function getSourceTypeName(): ?string;
+    /**
+     * listerner field
+     * @return mixed 
+     */
     function query();
 }

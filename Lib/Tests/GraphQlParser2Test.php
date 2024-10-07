@@ -38,22 +38,22 @@ class GraphQlParser2Test extends ModuleBaseTestCase{
     //  * @throws InvalidArgumentException 
     //  * @throws ExpectationFailedException 
     //  */
-    // public function test_global_query(){ 
-    //     $o = GraphQlParser::Parse($this->_lib(__FUNCTION__)); 
-    //     $o =  json_encode($o);
+    public function test_global_query(){ 
+        $o = GraphQlParser::Parse($this->_lib(__FUNCTION__)); 
+        $o =  json_encode($o);
         
-    //     $this->assertEquals(
-    //         json_encode((object)['name'=>null, 'firstname'=>null]),
-    //         $o);
-    // }
-    // public function test_global_query_list(){ 
-    //     $o = GraphQlParser::Parse($this->_lib(__FUNCTION__)); 
-    //     $o = json_encode($o);
+        $this->assertEquals(
+            json_encode((object)['userList'=>['name'=>null, 'firstname'=>null]]),
+            $o);
+    }
+    public function test_global_query_list(){ 
+        $o = GraphQlParser::Parse($this->_lib(__FUNCTION__)); 
+        $o = json_encode($o);
         
-    //     $this->assertEquals(
-    //         json_encode((object)['name'=>["fullname"=>null]]),
-    //         $o);
-    // }
+        $this->assertEquals(
+            json_encode((object)['name'=>["fullname"=>null]]),
+            $o);
+    }
     // public function test_global_func(){ 
     //     $o = GraphQlParser::Parse($this->_lib(__FUNCTION__)); 
     //     $this->assertEquals(

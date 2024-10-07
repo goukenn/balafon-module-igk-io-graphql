@@ -1,6 +1,6 @@
 # igk\io\GraphQL balafon's module 
 
-- version : 1.1
+- version : 1.4
 - author: C.A.D BONDJE DOUE
 
 ### Simple graphQL base implementation - Balafon 
@@ -103,5 +103,18 @@ GraphQlParser::ParseWithOption($options, $query_or_query_data, $data_or_source_l
 - by default if the query have a single entry result the name will be skipped as a shortant result.
 - modify options on query command 
     - %noSkipFirstNamedQueryEntry% disable name entry skipping
+
+### usage
+
+```php
+$output = GraphQLParser::Parse([
+    'query'=>[],    
+])
+// OR
+
+$src = file_get_contents(ViewHelper::Dir()."/check_ql.gql");
+$r = GraphQlParser::Parse($src, new ParsingQLListener($ctrl));
+
+```
 
 @ C.A.D. BONDJE DOUE

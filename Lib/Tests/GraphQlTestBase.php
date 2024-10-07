@@ -14,6 +14,5 @@ use IGK\Tests\Controllers\ModuleBaseTestCase;
 abstract class GraphQlTestBase extends ModuleBaseTestCase{
     public static function _lib($name){
         return file_get_contents(__DIR__."/Data/{$name}.gql");
-
     }
 }
