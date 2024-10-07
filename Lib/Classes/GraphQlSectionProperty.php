@@ -6,6 +6,9 @@ namespace igk\io\GraphQl;
 
 use IGK\Database\Mapping\Traits\ModelMappingDataTrait;
 use IGK\Models\ModelBase;
+use IGKException;
+use IGK\System\Exceptions\ArgumentTypeNotValidException;
+use ReflectionException;
 
 ///<summary></summary>
 /**
@@ -43,6 +46,15 @@ class GraphQlSectionProperty extends GraphQlDocProperty{
         }
         return $data;
     }
+    /**
+     * depend on source 
+     * @param mixed|IGraphQlIndexArray|array $source 
+     * @param null|callable $mapping 
+     * @return mixed 
+     * @throws IGKException 
+     * @throws ArgumentTypeNotValidException 
+     * @throws ReflectionException 
+     */
     protected function _getData($source, ?callable $mapping=null){
         if ($source instanceof IGraphQlIndexArray)
         {    

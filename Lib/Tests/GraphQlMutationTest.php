@@ -100,16 +100,14 @@ class GraphQlMutationTest extends ModuleBaseTestCase{
     // }
 
     // public function test_mutation_key_array(){
-    //     // query with name 
-    //     igk_debug(1);
+    //     // query with name  
     //     $obj = GraphQlParser::Parse([
     //         'query'=>"mutation{updateUserArray(uid:'charles'){ kUser { name } }}",
     //         'variables'=>[
     //             'uid'=>4
     //             ]
     //         ], new MockGraphListener, $parser);        
-            
-    //         igk_debug(0);
+             
         
     //     $this->assertEquals((object)[
     //         'updateUserArray'=>[ 

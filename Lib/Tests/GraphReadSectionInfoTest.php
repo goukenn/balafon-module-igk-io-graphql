@@ -85,7 +85,7 @@ class DbModelMockModel extends ModelBase{
         $this->is_mock = true;
         $this->raw = $raw;
     }
-    public function getTableColumnInfo()
+    public function getTableColumnInfo():?array
     {
         return [
             'name'=>new DbColumnInfo(["clName"=>'name']),

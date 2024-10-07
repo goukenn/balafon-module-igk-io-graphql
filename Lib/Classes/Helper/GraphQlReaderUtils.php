@@ -5,7 +5,9 @@
 namespace igk\io\GraphQl\Helper;
 
 use Closure;
+use IGK\Controllers\BaseController;
 use IGK\Helper\Activator;
+use IGK\Helper\ViewHelper;
 use igk\io\GraphQl\Annotations\Mutation;
 use igk\io\GraphQl\GraphQlConstants;
 use igk\io\GraphQl\GraphQlParser;
@@ -15,10 +17,14 @@ use igk\io\GraphQl\GraphQlReadSectionInfo;
 use igk\io\GraphQl\IGraphQlDescribedProperty;
 use IGK\System\IO\StringBuilder;
 use igk\io\GraphQl\GraphQlReferenceArrayObject;
+use igk\io\GraphQl\Schemas\GraphQlProjectDbIntrospection;
 use igk\io\GraphQl\Schemas\GraphQlSchemaDefinitionTypeBase;
+use igk\io\GraphQl\Schemas\IGraphQlIntrospection;
 use igk\io\GraphQl\Schemas\SchemaTypeDefinition;
 use igk\io\GraphQl\Schemas\ServeSchema;
+use igk\io\GraphQl\System\Database\Helpers\GraphQlDbHelper;
 use IGK\System\Helpers\AnnotationHelper;
+use IGKException;
 use ReflectionMethod;
 
 ///<summary></summary>
@@ -28,28 +34,40 @@ use ReflectionMethod;
  */
 abstract class GraphQlReaderUtils
 {
-
-    public static function InitSchemaDefinition($schema_builder, ServeSchema $schema)
-    {
-        $j = new $schema_builder();
-        $j->buildSchema($schema);
+    
+    public static function InitGraphDbQuery(BaseController $controller){
+        return GraphQlDbHelper::InitGraphDbQuery($controller);
     }
+    // public static function InitSchemaDefinition($schema_builder, ServeSchema $schema)
+    // {
+    //     $j = new $schema_builder();
+    //     $j->buildSchema($schema);
+    // }
 
-    public static function GetIntropectionSchema($object_class, $request_schema)
+    /**
+     * get introspection schema definition 
+     * @param string|object $object_class used for instropection service
+     * @param mixed $request_schema 
+     * @return string|false 
+     * @throws IGKException 
+     */
+    public static function GetIntropectionSchema($object_class, BaseController $ctrl = null)
     {
-        $cl = get_class($object_class);
+        $cl = is_object($object_class) ? get_class($object_class) : $object_class;
         $schema = new ServeSchema;
+        $ctrl = $ctrl ?? ViewHelper::CurrentCtrl();
+
+        // global register types with  definition  
         $schema->addType(SchemaTypeDefinition::CreateScalar('String')); //, 'String Scalar definition'));
         $schema->addType(SchemaTypeDefinition::CreateScalar('Int', 'Int Scalar definition'));
+        $schema->addType(SchemaTypeDefinition::CreateScalar('Float', 'Float Scalar definition'));
         $schema->addType(SchemaTypeDefinition::CreateScalar('ID', 'ID Scalar definition'));
 
-        $obj = SchemaTypeDefinition::CreateObject('User');
-        $obj->addField('name')->scalar('String');
-        $obj->addField('field')->scalar('String');
-        $schema->addType($obj);
-
+        // $obj = SchemaTypeDefinition::CreateObject('User');
+        // $obj->addField('name')->scalar('String');
+        // $obj->addField('field')->scalar('String');
+        // $schema->addType($obj);
         $v_queryobj = SchemaTypeDefinition::CreateObject('Query');
-        $ct = $v_queryobj->addField('listOfUser')->listOf('User');
         $schema->addType($v_queryobj);
 
         $mutations = null;
@@ -59,16 +77,24 @@ abstract class GraphQlReaderUtils
 
             $v_definition_class = $cl . GraphQlConstants::SCHEMAS_CLASS_DEF_SUFFIX;
             if (class_exists($v_definition_class) && is_subclass_of($v_definition_class, GraphQlSchemaDefinitionTypeBase::class)) {
-                self::InitSchemaDefinition($v_definition_class, $schema);
+                // self::InitSchemaDefinition($v_definition_class, $schema); 
+                $j = new $v_definition_class();
+                // $j->root_query = $v_queryobj;
+                $j->buildSchema($schema, $v_queryobj, $ctrl, $cl);
+            } else   if (is_subclass_of($cl, IGraphQlIntrospection::class)) {
+                // use as a db intropection ctrl schema 
+                if (!$ctrl) igk_die("required project to intropect as source db");
+
+                $j = new GraphQlProjectDbIntrospection($ctrl, $cl);
+                $j->buildSchema($schema, $v_queryobj);
+
+                igk_wln_e('instrospect...int db query ');
             }
-
-
-
             foreach (get_class_methods($cl) as $m) {
                 if ($m == 'query') continue;
 
                 $p = new ReflectionMethod($cl, $m);
-                $b = AnnotationHelper::GetMethodAnnotations($p, $uses);
+                $b = AnnotationHelper::GetAnnotations($p, $uses);
                 if (!$b) continue;
 
                 foreach ($b as $k => $v) {
@@ -77,8 +103,8 @@ abstract class GraphQlReaderUtils
                         $chains['mutations'] = $mutations;
                         $nv = $v->name ?? $m;
                         $mutations->addField($m)
-                        ->setAlias($v->name)
-                        ->listOf('User');
+                            ->setAlias($v->name)
+                            ->listOf('User');
                     }
                 }
             }
@@ -86,7 +112,8 @@ abstract class GraphQlReaderUtils
         foreach ($chains as $c) {
             $schema->addType($c);
         }
-        $schema->setMutationTypeName('Mutation');
+        if ($mutations)
+            $schema->setMutationTypeName('Mutation');
         return $schema->render();
     }
     /**

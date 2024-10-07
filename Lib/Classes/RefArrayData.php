@@ -3,16 +3,20 @@
 namespace igk\io\GraphQl;
 
 use ArrayAccess;
-use IGK\System\Array\IArrayKeyExists;
+use IGK\System\IArrayKeyExists;
 use IGK\System\Polyfill\ArrayAccessSelfTrait;
 
-class RefArrayData implements ArrayAccess, IArrayKeyExists{
+class RefArrayData implements ArrayAccess, IArrayKeyExists,IGraphQlIndexArray {
     use ArrayAccessSelfTrait;
     private $m_args;
 
     public function __construct(array & $args)
     {
         $this->m_args = & $args;
+    }
+
+    public function to_array(): array {
+        return $this->m_args;
     }
 
     public function keyExists(string $name): bool { 

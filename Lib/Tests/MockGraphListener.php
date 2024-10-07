@@ -54,9 +54,10 @@ class MockGraphListener implements IGraphQlInspector, IGraphQlMapDataResolver{
             "url"=>"https://com.test.balafon.get-picure/",
         ];
     }
+    
     public function usersInject(?Users $user){
         if ($user) 
-        return [$user];//->map(['clLogin'=>'email'])];
+        return [$user];
     }
     public function usersInjectArray($uid){
         $row1 = Users::createEmptyRow(); 

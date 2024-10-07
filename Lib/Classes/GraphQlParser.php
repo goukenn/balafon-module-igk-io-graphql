@@ -45,6 +45,9 @@ class GraphQlParser implements IGraphQlParserOptions
      */
     private $m_introspecting;
     
+    public function getIntrospected(){
+        return $this->m_introspecting;
+    }
     public function setListener(?IGraphQlInspector $listener){
         $this->m_listener = $listener;
         return $this;
@@ -240,14 +243,23 @@ class GraphQlParser implements IGraphQlParserOptions
         $ts = [];
         $v_model_mapping = $mapping ?? $this->_get_model_callback();
         $sourceType = $this->m_listener ? $this->m_listener->getSourceTypeName() : null;
-        $noskip_entrie_ = 
-        $this->noSkipFirstNamedQueryEntry;
+        $noskip_entrie_ = $this->noSkipFirstNamedQueryEntry;
 
         if ($queries){
             $root = true;
+            // $tms = $this->_get_root_data();
+            // $this->m_root_data = & $tms;
+            // $rm = new RefArrayData($tms);
+            unset($this->m_root_data);
+            $rm = null;
+            $this->m_root_data = null;
             $tms = $this->_get_root_data();
-            $this->m_root_data = & $tms;
-            $rm = new RefArrayData($tms);
+
+            if (!is_null($tms)){
+                $this->m_root_data = & $tms;
+                $rm = new RefArrayData($tms);
+            }
+
             while($queries){
                 $q = array_shift($queries);
                 // $ms = $tms;
@@ -414,8 +426,9 @@ class GraphQlParser implements IGraphQlParserOptions
                             $o = igk_getv($v_o, '__schema');
                             if ($o){
 
-                                $this->m_introspecting = true;
-                                return GraphQlReaderUtils::GetIntropectionSchema($this->getListener(), $o);
+                                $this->m_introspecting = true; 
+                                return GraphQlReaderUtils::GetIntropectionSchema(
+                                    $this->getListener(), null);
                             }
                         }
 
@@ -1239,6 +1252,13 @@ class GraphQlParser implements IGraphQlParserOptions
                 $v = igk_str_remove_quote($ch.igk_str_read_brank($this->m_query, $offset,$ch,$ch));
                 $offset++;
                 break;
+            }
+            if ($ch=='['){
+                $s = $ch.igk_str_read_brank($this->m_query, $offset, ']', '[');
+                $v = json_decode($s);
+                trim($s, '[]');
+                $offset++;
+                break; 
             }
             if ($r && empty(trim($ch))){
                 break;

@@ -80,7 +80,6 @@ speading on fragment - always in the current context -
 by default reseverd fields arguments
 - limit : to limit export result
 - orderBy : to orderBy a spécific column list
-- 
 
 
 
@@ -93,8 +92,7 @@ by default reseverd fields arguments
 
 GraphQlParser::Parse($query_or_query_data, $data_or_source_listener);
 
-```
-
+``` 
 
 
 ```php
@@ -105,9 +103,5 @@ GraphQlParser::ParseWithOption($options, $query_or_query_data, $data_or_source_l
 
 - by default if the query have a single entry result the name will be skipped as a shortant result.
 - modify options on query command 
-    - # %noSkipFirstNamedQueryEntry% disable name entry skipping
-    - # %
-
-
-
+    - %noSkipFirstNamedQueryEntry% disable name entry skipping 
 2023 @ C.A.D. BONDJE DOUE

@@ -133,6 +133,16 @@ class GraphQlReadSectionInfo extends GraphQlSectionProperty{
         $this->m_sourceTypeName = $typename;
         return $this;
     }
+    /**
+     * 
+     * @param mixed $data 
+     * @param mixed $key 
+     * @param mixed $v_def 
+     * @param bool $optional 
+     * @return mixed 
+     * @throws GraphQlSyntaxException 
+     * @throws IGKException 
+     */
     protected function _resolvData($data, $key, $v_def, $optional=false){
         if (is_null($data)){
             return null;
@@ -141,8 +151,12 @@ class GraphQlReadSectionInfo extends GraphQlSectionProperty{
              throw new GraphQlSyntaxException(sprintf('missing property [%s]', $key));
         }
         $v = igk_getv($data, $key, $v_def);  
-        // system pass closure so
-        if ($v instanceof Closure){
+        // + | --------------------------------------------------------------------
+        // + | check for closure d 
+        // + |
+        
+        //  + | system pass closure so
+        if (($v instanceof Closure)){
             $newv = $v();
             $this->m_reader->updateSourceData($data, $key, $newv);
             return $newv;

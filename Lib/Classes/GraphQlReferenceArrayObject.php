@@ -6,6 +6,7 @@ namespace igk\io\GraphQl;
 
 use ArrayAccess;
 use IGK\System\Polyfill\ArrayAccessSelfTrait;
+use IGK\System\Polyfill\JsonSerializableTrait;
 use JsonSerializable;
 
 ///<summary></summary>
@@ -15,9 +16,10 @@ use JsonSerializable;
 */
 class GraphQlReferenceArrayObject implements ArrayAccess, JsonSerializable{
     use ArrayAccessSelfTrait;
+    use JsonSerializableTrait;
     private $m_tab;
 
-    public function jsonSerialize(): mixed {
+    public function _json_serialize(){
         return $this->m_tab;
     }
     public function __debugInfo()

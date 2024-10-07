@@ -24,8 +24,6 @@ class GraphQlInitSDLCommand extends AppExecCommand
 	var $usage = 'controller';
 	public function exec($command, ?string $controller = null)
 	{ 
-
-		require_once IGK_LIB_DIR.'/Lib/functions-helpers/db.php';
 		$ctrl = self::GetController($controller);  
 		echo GraphQlDbHelper::GenSQLDefinition($ctrl);
 

@@ -10,6 +10,5 @@ use IGK\System\AnnotationBase as sysAnnotation;
 * 
 * @package igk\io\GraphQl\Annotations
 */
-abstract class AnnotationBase extends sysAnnotation{
-
+abstract class AnnotationBase extends sysAnnotation{ 
 }
