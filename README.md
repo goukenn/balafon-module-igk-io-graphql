@@ -1,10 +1,9 @@
-# igk/io/GraphQl
- 
-# igk\io\GraphQL module 
+# igk\io\GraphQL balafon's module 
 
-version : 1.0
+- version : 1.1
+- author: C.A.D BONDJE DOUE
 
-### Simple graphQL base implementation to get or mutate data from balafon Framework
+### Simple graphQL base implementation - Balafon 
 
 
 ```graphql
