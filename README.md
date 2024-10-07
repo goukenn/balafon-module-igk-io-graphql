@@ -103,5 +103,6 @@ GraphQlParser::ParseWithOption($options, $query_or_query_data, $data_or_source_l
 
 - by default if the query have a single entry result the name will be skipped as a shortant result.
 - modify options on query command 
-    - %noSkipFirstNamedQueryEntry% disable name entry skipping 
-2023 @ C.A.D. BONDJE DOUE
+    - %noSkipFirstNamedQueryEntry% disable name entry skipping
+
+@ C.A.D. BONDJE DOUE
